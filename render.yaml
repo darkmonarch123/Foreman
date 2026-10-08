@@ -1,0 +1,32 @@
+# Render Blueprint for Foreman.
+#
+# One Node web service. The database, authentication, realtime and storage are
+# a managed Supabase project, so nothing else is provisioned here.
+#
+# Values marked `sync: false` are entered in the Render dashboard and are never
+# stored in this file. See docs/deployment-render.md.
+services:
+  - type: web
+    name: foreman
+    runtime: node
+    plan: free
+    autoDeploy: false # deploys are triggered by GitHub Actions after CI passes
+    buildCommand: npm ci && npm run build
+    startCommand: npm run start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: NEXT_TELEMETRY_DISABLED
+        value: "1"
+      # Public values. They are compiled into the browser bundle, so they must
+      # be present when the BUILD runs.
+      - key: NEXT_PUBLIC_SUPABASE_URL
+        sync: false
+      - key: NEXT_PUBLIC_SUPABASE_ANON_KEY
+        sync: false
+      # The exact public origin, e.g. https://foreman.onrender.com (no trailing slash).
+      - key: NEXT_PUBLIC_SITE_URL
+        sync: false
+      - key: NEXT_PUBLIC_APP_URL
+        sync: false

@@ -1,0 +1,45 @@
+name: Deploy to Render
+
+# Runs only after the CI workflow has succeeded for a push to the default
+# branch. Pull requests are never deployed.
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Trigger Render deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push'
+    steps:
+      - name: Trigger the deploy hook
+        env:
+          # A secret URL from Render -> Service -> Settings -> Deploy Hook.
+          # It is passed through the environment so it never appears in the
+          # command line or the log.
+          RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+          COMMIT_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          if [ -z "$RENDER_DEPLOY_HOOK_URL" ]; then
+            echo "::notice::RENDER_DEPLOY_HOOK_URL is not set, so nothing was deployed."
+            exit 0
+          fi
+          status=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+            --max-time 30 --request POST "${RENDER_DEPLOY_HOOK_URL}&ref=${COMMIT_SHA}")
+          echo "Render responded with HTTP ${status}"
+          case "$status" in
+            2*) echo "Deploy triggered for ${COMMIT_SHA}." ;;
+            *)  echo "::error::Render did not accept the deploy request."; exit 1 ;;
+          esac

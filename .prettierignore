@@ -1,0 +1,10 @@
+.next
+node_modules
+coverage
+test-results
+playwright-report
+package-lock.json
+next-env.d.ts
+# Generated from src/lib/templates/catalog.ts; SQL is not formatted by Prettier anyway.
+supabase/migrations
+AGENTS.md

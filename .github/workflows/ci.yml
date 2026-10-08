@@ -1,0 +1,86 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# A newer push to the same branch cancels the run it supersedes.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  NEXT_TELEMETRY_DISABLED: "1"
+  # Placeholder, non-secret values so the build takes the "configured" code
+  # path. No request is made to this host during CI.
+  NEXT_PUBLIC_SUPABASE_URL: https://placeholder-project.supabase.co
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder-anon-key
+  NEXT_PUBLIC_SITE_URL: http://localhost:3000
+
+jobs:
+  verify:
+    name: Format, lint, types, tests, build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies (locked)
+        run: npm ci
+
+      - name: Check formatting
+        run: npm run format:check
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Type-check
+        run: npm run typecheck
+
+      # Unit, component and database tests. The database tests apply the real
+      # migrations to an in-process Postgres and exercise RLS and every function.
+      - name: Unit, component and database tests
+        run: npm run test
+
+      - name: Production build
+        run: npm run build
+
+  browser:
+    name: Board in a real browser
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies (locked)
+        run: npm ci
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      # The real board UI and sync engine, several users at once, against an
+      # in-memory test backend. Does not need Supabase.
+      - name: Board browser tests
+        run: npm run test:browser
+
+      - name: Upload traces on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-traces
+          path: test-results/
+          retention-days: 7

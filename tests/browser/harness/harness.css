@@ -1,0 +1,3 @@
+@import "../../../src/app/globals.css";
+/* The harness lives outside src/, so tell Tailwind where the components are. */
+@source "../../../src";
