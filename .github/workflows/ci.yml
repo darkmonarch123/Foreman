@@ -6,6 +6,9 @@ on:
     branches: [master]
 
 # A newer push to the same branch cancels the run it supersedes.
+# This is the default behavior, but we explicitly set it here to make it clear
+# that we want to cancel in-progress runs for the same branch. This is important
+# because the deploy workflow runs after CI, and we want to deploy every successful push to the default branch, even if a newer push has been made since the CI run started.
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true

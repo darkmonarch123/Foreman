@@ -2,6 +2,9 @@ name: Deploy to Render
 
 # Runs only after the CI workflow has succeeded for a push to the default
 # branch. Pull requests are never deployed.
+# A newer push to the same branch does not cancel the run it supersedes, because
+# the deploy is a separate workflow that runs after CI, and we want to deploy
+# every successful push to the default branch.
 on:
   workflow_run:
     workflows: [CI]
