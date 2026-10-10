@@ -15,7 +15,7 @@ import { createClient } from "@/lib/supabase/server";
  *
  * The token is consumed on the server and the browser is immediately
  * redirected to a clean URL, so it does not linger in the address bar,
- * history or Referer headers.
+ * history or Referer headers. moreover, the token is not stored in a cookie or localStorage, so it cannot be stolen by XSS.
  */
 const ALLOWED_TYPES = new Set(["recovery", "email", "signup"]);
 
