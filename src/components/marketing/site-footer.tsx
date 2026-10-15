@@ -60,11 +60,6 @@ export function SiteFooter() {
           </nav>
         ))}
       </div>
-      <div className="border-t border-line">
-        <p className="mx-auto max-w-6xl px-6 py-6 text-[13px] text-muted">
-          Foreman is a real-time collaborative visual workspace built with Next.js and Supabase.
-        </p>
-      </div>
     </footer>
   );
 }
