@@ -1,6 +1,6 @@
 "use client";
 
-import { Bold, BringToFront, Copy, MessageSquarePlus, Trash2 } from "lucide-react";
+import { Bold, BringToFront, Copy, MessageSquarePlus, Sparkles, Trash2 } from "lucide-react";
 import { IconButton } from "@/components/ui/button";
 import { Select } from "@/components/ui/field";
 import { Tooltip } from "@/components/ui/tooltip";
@@ -24,6 +24,8 @@ interface ObjectToolbarProps {
   onDelete: () => void;
   onComment: () => void;
   canComment: boolean;
+  /** Present only when the Assistant is available. */
+  onAskForeman?: () => void;
 }
 
 function Swatches({
@@ -70,6 +72,7 @@ export function ObjectToolbar({
   onDelete,
   onComment,
   canComment,
+  onAskForeman,
 }: ObjectToolbarProps) {
   const divider = <span role="separator" aria-orientation="vertical" className="mx-1 h-6 w-px bg-line" />;
   return (
@@ -138,6 +141,13 @@ export function ObjectToolbar({
         <Tooltip label="Comment on this item" side="bottom">
           <IconButton label="Comment on this item" size="sm" onClick={onComment}>
             <MessageSquarePlus className="size-4" aria-hidden />
+          </IconButton>
+        </Tooltip>
+      ) : null}
+      {onAskForeman ? (
+        <Tooltip label="Ask Foreman about this item" side="bottom">
+          <IconButton label="Ask Foreman about this item" size="sm" onClick={onAskForeman}>
+            <Sparkles className="size-4" aria-hidden />
           </IconButton>
         </Tooltip>
       ) : null}

@@ -112,5 +112,19 @@ export function createHttpBoardServices(baseUrl: string, userKey: string): Board
     transferOwnership: async (userId) => {
       await rpc("transferOwnership", { userId });
     },
+    // `?assistant=off` simulates the feature flag being off.
+    assistant:
+      new URLSearchParams(window.location.search).get("assistant") === "off"
+        ? null
+        : {
+            run: (request) => rpc("assistant.run", request as unknown as Record<string, unknown>),
+            list: () => rpc("assistant.list"),
+            markViewed: async (proposalId) => {
+              await rpc("assistant.markViewed", { proposalId });
+            },
+            edit: (proposalId, proposal) => rpc("assistant.edit", { proposalId, proposal }),
+            reject: (proposalId) => rpc("assistant.reject", { proposalId }),
+            accept: (proposalId) => rpc("assistant.accept", { proposalId }),
+          },
   };
 }

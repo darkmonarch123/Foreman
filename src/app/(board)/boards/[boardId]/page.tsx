@@ -8,6 +8,7 @@ import { requireProfile } from "@/lib/auth/dal";
 import type { Member } from "@/lib/board/services";
 import type { BoardState } from "@/lib/board/types";
 import { getBoardMembers, isUuid, loadBoardState } from "@/lib/boards/data";
+import { isAssistantEnabled } from "@/lib/assistant/flag";
 import { toAppError } from "@/lib/errors";
 
 export const metadata: Metadata = { title: "Board" };
@@ -36,6 +37,7 @@ async function BoardLoader({ params }: { params: Params }) {
     <BoardClient
       initial={loaded.state}
       initialMembers={loaded.members}
+      assistantEnabled={isAssistantEnabled()}
       currentUser={{
         id: profile.id,
         first_name: profile.first_name,

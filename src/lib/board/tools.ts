@@ -60,6 +60,10 @@ export function shortcutList(isMac: boolean): { group: string; entries: Shortcut
       ],
     },
     {
+      group: "Assistant",
+      entries: [{ keys: ["F"], action: "Open or close Foreman Assistant (when it is available)" }],
+    },
+    {
       group: "View",
       entries: [
         { keys: ["Space + drag"], action: "Pan the canvas" },

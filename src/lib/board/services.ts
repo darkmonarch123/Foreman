@@ -1,3 +1,4 @@
+import type { AssistantServices } from "@/lib/assistant/types";
 import type { BoardTransport } from "./engine";
 import type { AccessMode, BoardRole, BoardSummary, ServerOperation } from "./types";
 
@@ -149,6 +150,8 @@ export interface BoardServices extends SharingServices {
   loadActivity(before?: string): Promise<ActivityItem[]>;
   renameBoard(title: string): Promise<BoardSummary>;
   recordExport(scope: "board" | "viewport"): Promise<void>;
+  /** Foreman Assistant. Absent or null when the feature is turned off. */
+  assistant?: AssistantServices | null;
 }
 
 export const COMMENTS_PAGE_SIZE = 50;
