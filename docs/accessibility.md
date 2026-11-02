@@ -95,6 +95,26 @@ DOM, so a screen reader may read it in document order, but without any indicatio
 belongs to or where it sits. Treat the canvas as a visual surface and the [Board Outline](#the-board-outline) as
 the accessible route to its content.
 
+## Foreman Assistant panel
+
+- The panel is a labelled `aside` ("Foreman Assistant") beside the canvas, not over it, so the board stays visible and
+  usable. On narrow screens it overlays like the other side panel.
+- `F` opens it and `F` or `Esc` closes it. `F` is ignored while focus is in a text field or note editor. Opening
+  moves focus to the panel heading; closing returns focus to where it came from.
+- Every control is a native element with a visible label: two `select`s, a text input, buttons. Finding cards are
+  list items named by their title, and have their own focus ring when they receive focus.
+- Progress and results are announced through the board's existing polite live region ("Foreman Assistant: Find
+  planning gaps is running", "…finished. 3 findings.", "Proposal accepted and added to the board. You can undo it.",
+  "This proposal is out of date and was not applied."). Errors also appear as an inline alert.
+- Focus is never dropped: after Accept it moves to the card's "Undo this" button, after Reject to the panel heading,
+  and after cancelling or saving an edit back to the Edit button. `Esc` cancels an edit first and closes the panel
+  second.
+- Label (Fact, Inference, Suggestion), confidence and evidence are text, not colour alone. The preview ghost is
+  decorative (`aria-hidden`); the same information is in the card's "What would change".
+- Accept is disabled, with a visible explanation, when the proposal is stale or the browser is offline.
+- Verified by a keyboard-only browser test (`tests/browser/assistant.spec.ts`, "is fully usable from the keyboard").
+  Not verified: a screen reader pass, or a contrast audit of the new panel.
+
 ## Keyboard support
 
 ### Shortcuts on the board
@@ -114,6 +134,7 @@ Every row was checked against the handlers in `board-workspace.tsx`, `canvas-sta
 | `O`                     | Circle tool                                                          | Editors and owners                                                                   |
 | `A`                     | Arrow tool                                                           | Editors and owners                                                                   |
 | `C`                     | Comment tool                                                         |                                                                                      |
+| `F`                     | Open or close Foreman Assistant                                      | Only when the Assistant is enabled; ignored while typing in a text field             |
 | `Delete` or `Backspace` | Delete the selected item                                             | Editors and owners                                                                   |
 | `Enter`                 | Edit the selected item's text                                        | Only when focus is not on a button, link, tab or menu item                           |
 | Arrow keys              | Move the selected item by 1 unit                                     | Not while focus is inside a tab list, menu or list box                               |
