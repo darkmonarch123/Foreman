@@ -25,9 +25,9 @@ describe("assistant_enabled feature flag", () => {
     }
   });
 
-  it("ships off in render.yaml", async () => {
+  it("ships on in render.yaml", async () => {
     const { readFileSync } = await import("node:fs");
     const yaml = readFileSync("render.yaml", "utf8");
-    expect(yaml).toMatch(/key: ASSISTANT_ENABLED\s+value: "false"/);
+    expect(yaml).toMatch(/key: ASSISTANT_ENABLED\s+value: "true"/);
   });
 });

@@ -30,6 +30,6 @@ services:
         sync: false
       - key: NEXT_PUBLIC_APP_URL
         sync: false
-      # Foreman Assistant feature flag. Off by default in production; set to "true" to enable.
+      # Foreman Assistant feature flag. On; set to "false" to switch it off. Needs the assistant migration.
       - key: ASSISTANT_ENABLED
         value: "true"
