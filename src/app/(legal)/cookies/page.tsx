@@ -26,6 +26,10 @@ export default function CookiesPage() {
       <ul>
         <li>Your cookie choice, so the banner does not reappear.</li>
         <li>
+          Whether you have seen or closed a “What’s new” announcement, so it does not keep appearing. It records only
+          that, for your account in this browser.
+        </li>
+        <li>
           Board edits that have not reached the server yet, so they are not lost if your connection drops. They are
           removed as soon as the server confirms them.
         </li>

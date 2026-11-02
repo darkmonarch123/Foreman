@@ -115,6 +115,14 @@ the accessible route to its content.
 - Verified by a keyboard-only browser test (`tests/browser/assistant.spec.ts`, "is fully usable from the keyboard").
   Not verified: a screen reader pass, or a contrast audit of the new panel.
 
+## "What's new" announcement
+
+- The first time someone opens the dashboard during the announcement window, it appears as the standard accessible
+  modal (focus moves in and returns on close, `Esc` closes, Tab stays inside). Closing it in any way counts as seen.
+- After that it is a `section` named by its heading ("What's new on Foreman") above the boards, with a labelled
+  "Close announcement" button. It never takes focus by itself.
+- The how-to page at `/whats-new` uses one `h1` and an `h2` per section, an ordered list of steps, and real links.
+
 ## Keyboard support
 
 ### Shortcuts on the board

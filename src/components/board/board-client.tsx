@@ -14,10 +14,18 @@ interface BoardClientProps {
   currentUser: WorkspaceUser;
   /** The assistant_enabled flag, decided on the server. */
   assistantEnabled?: boolean;
+  /** Open the Assistant panel on arrival (ignored when the Assistant is off). */
+  initialAssistantOpen?: boolean;
 }
 
 /** Wires the board UI to Supabase. Everything below this component is backend-agnostic. */
-export function BoardClient({ initial, initialMembers, currentUser, assistantEnabled = false }: BoardClientProps) {
+export function BoardClient({
+  initial,
+  initialMembers,
+  currentUser,
+  assistantEnabled = false,
+  initialAssistantOpen = false,
+}: BoardClientProps) {
   const services = useMemo(
     () => ({
       ...createSupabaseBoardServices(getBrowserClient(), initial.board.id, currentUser.id),
@@ -26,6 +34,12 @@ export function BoardClient({ initial, initialMembers, currentUser, assistantEna
     [initial.board.id, currentUser.id, assistantEnabled],
   );
   return (
-    <BoardWorkspace initial={initial} initialMembers={initialMembers} currentUser={currentUser} services={services} />
+    <BoardWorkspace
+      initial={initial}
+      initialMembers={initialMembers}
+      currentUser={currentUser}
+      services={services}
+      initialAssistantOpen={initialAssistantOpen}
+    />
   );
 }

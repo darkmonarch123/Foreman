@@ -63,6 +63,8 @@ interface BoardWorkspaceProps {
   services: BoardServices;
   /** Overridable for tests; defaults to localStorage scoped to this user and board. */
   pendingStore?: PendingStore;
+  /** Open the Assistant panel on arrival, when the Assistant is available. */
+  initialAssistantOpen?: boolean;
 }
 
 interface Paged<T> {
@@ -75,7 +77,14 @@ interface Paged<T> {
 const EMPTY_PAGE = { items: null, error: null, hasMore: false, loadingMore: false };
 const CURSOR_TTL_MS = 8_000;
 
-export function BoardWorkspace({ initial, initialMembers, currentUser, services, pendingStore }: BoardWorkspaceProps) {
+export function BoardWorkspace({
+  initial,
+  initialMembers,
+  currentUser,
+  services,
+  pendingStore,
+  initialAssistantOpen = false,
+}: BoardWorkspaceProps) {
   const router = useRouter();
   const toast = useToast();
   const boardId = initial.board.id;
@@ -133,7 +142,15 @@ export function BoardWorkspace({ initial, initialMembers, currentUser, services,
   const [commentTargetId, setCommentTargetId] = useState<string | null>(null);
   const [announcement, setAnnouncement] = useState("");
   const assistant = services.assistant ?? null;
-  const [assistantOpen, setAssistantOpen] = useState(false);
+  const [assistantOpen, setAssistantOpen] = useState(() => initialAssistantOpen && Boolean(assistant));
+
+  // `?assistant=open` has done its job once the panel is open; drop it so a reload doesn't reopen it.
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    if (url.searchParams.get("assistant") !== "open") return;
+    url.searchParams.delete("assistant");
+    window.history.replaceState(window.history.state, "", url.pathname + url.search + url.hash);
+  }, []);
   const [assistantIntent, setAssistantIntent] = useState<AssistantIntent | null>(null);
   const [ghostDraft, setGhostDraft] = useState<ProposalDraft | null>(null);
   const [online, setOnline] = useState(true);

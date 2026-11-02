@@ -14,9 +14,12 @@ import { toAppError } from "@/lib/errors";
 export const metadata: Metadata = { title: "Board" };
 
 type Params = Promise<{ boardId: string }>;
+type Search = Promise<Record<string, string | string[] | undefined>>;
 
-async function BoardLoader({ params }: { params: Params }) {
+async function BoardLoader({ params, searchParams }: { params: Params; searchParams: Search }) {
   const { boardId } = await params;
+  // `?assistant=open` (from the What’s new page) opens the Assistant panel on arrival.
+  const openAssistant = (await searchParams).assistant === "open";
   const profile = await requireProfile(isUuid(boardId) ? `/boards/${boardId}` : "/dashboard");
 
   // Both calls are authorised in the database against the signed-in user.
@@ -38,6 +41,7 @@ async function BoardLoader({ params }: { params: Params }) {
       initial={loaded.state}
       initialMembers={loaded.members}
       assistantEnabled={isAssistantEnabled()}
+      initialAssistantOpen={openAssistant}
       currentUser={{
         id: profile.id,
         first_name: profile.first_name,
@@ -68,10 +72,10 @@ function BoardSkeleton() {
   );
 }
 
-export default function BoardPage({ params }: { params: Params }) {
+export default function BoardPage({ params, searchParams }: { params: Params; searchParams: Search }) {
   return (
     <Suspense fallback={<BoardSkeleton />}>
-      <BoardLoader params={params} />
+      <BoardLoader params={params} searchParams={searchParams} />
     </Suspense>
   );
 }

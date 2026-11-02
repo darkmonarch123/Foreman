@@ -656,3 +656,32 @@ test.describe("feature flag off", () => {
     expect((await control("assistant-events")) as string[]).toEqual([]);
   });
 });
+
+test.describe("arriving from What's new", () => {
+  test("?assistant=open opens the panel on arrival, then drops the parameter so a reload doesn't reopen it", async ({
+    backend,
+    page,
+    control,
+  }) => {
+    await seed(control);
+    await page.goto(`/?backend=${encodeURIComponent(`http://127.0.0.1:${backend.port}`)}&user=ada&assistant=open`);
+    await expect(page.getByTestId("canvas-stage")).toBeVisible();
+    await expect(panel(page)).toBeVisible();
+    await expect(panel(page).getByRole("heading", { name: "Foreman Assistant" })).toBeFocused();
+    await expect.poll(() => new URL(page.url()).searchParams.get("assistant")).toBeNull();
+
+    await page.reload();
+    await expect(page.getByTestId("canvas-stage")).toBeVisible();
+    await expect(panel(page)).toHaveCount(0);
+  });
+
+  test("?assistant=open does nothing when the Assistant is off", async ({ backend, page, control }) => {
+    await seed(control);
+    // assistant=off simulates the flag; a second assistant parameter cannot switch it back on.
+    await page.goto(
+      `/?backend=${encodeURIComponent(`http://127.0.0.1:${backend.port}`)}&user=ada&assistant=off&assistant=open`,
+    );
+    await expect(page.getByTestId("canvas-stage")).toBeVisible();
+    await expect(panel(page)).toHaveCount(0);
+  });
+});
