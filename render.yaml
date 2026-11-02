@@ -32,4 +32,4 @@ services:
         sync: false
       # Foreman Assistant feature flag. Off by default in production; set to "true" to enable.
       - key: ASSISTANT_ENABLED
-        value: "false"
+        value: "true"
