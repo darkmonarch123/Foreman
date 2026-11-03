@@ -261,6 +261,7 @@ nonce-based CSP; server-verified presence.
 - [Realtime](docs/realtime.md)
 - [Security](docs/security.md)
 - [Accessibility](docs/accessibility.md)
+- [Site design system](docs/design-system.md)
 - [Testing](docs/testing.md)
 - [Deployment on Render](docs/deployment-render.md)
 - [GitHub Actions](docs/github-actions.md)

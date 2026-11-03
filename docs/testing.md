@@ -242,10 +242,11 @@ Vite dev server on 127.0.0.1:4317 serves the harness page
 
 ### Spec files
 
-| File                    | Tests | Covers                                                                                                              |
-| ----------------------- | ----- | ------------------------------------------------------------------------------------------------------------------- |
-| `board.spec.ts`         | 26    | Editing, collaboration between pages, roles, offline and recovery, PNG export, activity.                            |
-| `accessibility.spec.ts` | 9     | Outline panel, mouse-free editing, focus trapping, labelled controls, shortcuts, context menu, live regions, focus. |
+| File                    | Tests | Covers                                                                                                                                                                                                                                                    |
+| ----------------------- | ----- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `board.spec.ts`         | 26    | Editing, collaboration between pages, roles, offline and recovery, PNG export, activity.                                                                                                                                                                  |
+| `landing.spec.ts`       | 18    | Landing page at 393, 430, 744 and 1440px: sections present, no horizontal overflow (also at 150% text), mobile menu, 44px targets, Dark Mode tokens, reduced motion, focus ring, card drag. Runs the real page component in the harness (`landing.html`). |
+| `accessibility.spec.ts` | 9     | Outline panel, mouse-free editing, focus trapping, labelled controls, shortcuts, context menu, live regions, focus.                                                                                                                                       |
 
 ### What a pass proves
 

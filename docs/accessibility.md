@@ -95,6 +95,32 @@ DOM, so a screen reader may read it in document order, but without any indicatio
 belongs to or where it sits. Treat the canvas as a visual surface and the [Board Outline](#the-board-outline) as
 the accessible route to its content.
 
+## Landing page
+
+The public landing page (`/`) has its own design system ([Site design system](design-system.md)).
+
+- **Landmarks:** a `header` with the primary `nav`, one `main`, `section`s labelled by their headings, and a `footer`
+  whose link columns are labelled `nav`s. There is exactly one `h1`.
+- **Navigation on small screens:** a menu button (`aria-expanded`, `aria-controls`) opens a labelled "Menu" panel.
+  Escape closes it and returns focus to the button; following a link or clicking outside also closes it.
+- **Touch targets:** every button and link in the header, and every call to action, is at least 44×44px. Footer
+  links are 44px tall on phones.
+- **Focus:** a 3px blue outline with a 3px offset on every link and button.
+- **Template filter:** a labelled group of toggle buttons (`aria-pressed`), not tabs, since there are no tab
+  panels. The number of templates shown is announced politely.
+- **Illustrations:** decorative art (aurora, sticky notes, cursors, the story stage) is `aria-hidden`. The product
+  window is a `figure` with a caption; its toolbar buttons are real buttons with names.
+- **Motion:** with `prefers-reduced-motion: reduce` there is no parallax, tilt, scaling, reveal, word highlighting
+  or drifting; springs settle instantly and the pinned story changes step without moving. Content is fully visible
+  before any script runs, because the styles that hide content until it is revealed only apply once the motion
+  script marks the page.
+- **Transparency and contrast:** `prefers-reduced-transparency` makes glass solid; `prefers-contrast: more`
+  darkens secondary text and outlines glass.
+- **Colour contrast:** every text/background token pair meets WCAG AA (4.5:1) in light and dark, including
+  secondary text measured over the brightest part of the aurora. Status is never shown by colour alone ("Available
+  now", "Coming soon", "Saved" are written out).
+- **Not verified:** a screen-reader pass, or real iOS Safari (the browser tests use Chromium with mobile viewports).
+
 ## Keyboard support
 
 ### Shortcuts on the board
