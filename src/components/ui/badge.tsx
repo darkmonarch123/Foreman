@@ -73,3 +73,34 @@ export function Pill({ children, className }: { children: ReactNode; className?:
     </span>
   );
 }
+
+const siteBadgeTones = {
+  neutral: "bg-site-bg-alt text-site-label-2",
+  accent: "bg-site-accent/12 text-site-link",
+} as const;
+
+/**
+ * A small label on the site (plan status, template category). The text carries the
+ * meaning; the tint is only a secondary cue.
+ */
+export function Badge({
+  children,
+  tone = "neutral",
+  className,
+}: {
+  children: ReactNode;
+  tone?: keyof typeof siteBadgeTones;
+  className?: string;
+}) {
+  return (
+    <span
+      className={cn(
+        "inline-flex min-h-6 items-center rounded-full px-2.5 py-0.5 text-site-caption font-semibold tracking-wide",
+        siteBadgeTones[tone],
+        className,
+      )}
+    >
+      {children}
+    </span>
+  );
+}

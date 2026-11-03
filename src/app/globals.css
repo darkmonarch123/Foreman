@@ -55,6 +55,94 @@
   --animate-spin-slow: spin 0.9s linear infinite;
 }
 
+/*
+ * Site design system: the public landing page.
+ *
+ * Utilities (bg-site-bg, text-site-label, rounded-site-lg, ...) read CSS variables
+ * that are only defined inside `.site`, so the rest of the product keeps its own
+ * look. Light values are the default; Dark Mode follows the operating system.
+ */
+@theme inline {
+  --color-site-bg: var(--site-bg);
+  --color-site-bg-alt: var(--site-bg-alt);
+  --color-site-surface: var(--site-surface);
+  --color-site-label: var(--site-label);
+  --color-site-label-2: var(--site-label-2);
+  --color-site-label-on-tint: var(--site-label-on-tint);
+  --color-site-line: var(--site-line);
+  --color-site-line-strong: var(--site-line-strong);
+  --color-site-accent: var(--site-accent);
+  --color-site-accent-hover: var(--site-accent-hover);
+  --color-site-link: var(--site-link);
+  --color-site-success: var(--site-success);
+  --color-site-glass: var(--site-glass);
+  --color-site-plan: var(--site-plan);
+  --color-site-plan-card: var(--site-plan-card);
+  --color-site-build: var(--site-build);
+  --color-site-build-card: var(--site-build-card);
+  --color-site-test: var(--site-test);
+  --color-site-test-card: var(--site-test-card);
+  --color-site-dot: var(--site-dot);
+  --shadow-site-lg: var(--site-shadow-lg);
+  --shadow-site-hover: var(--site-shadow-hover);
+  --shadow-site-glass: var(--site-shadow-glass);
+}
+
+@theme {
+  /* System UI first (San Francisco on Apple devices), then the bundled Inter. */
+  --font-site:
+    -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Inter Variable", system-ui, sans-serif;
+
+  /* Type scale: tight leading and negative tracking as size grows; body stays near zero. */
+  --text-site-display: clamp(2.75rem, 7vw, 5rem);
+  --text-site-display--line-height: 1.05;
+  --text-site-display--letter-spacing: -0.045em;
+  --text-site-display--font-weight: 700;
+  --text-site-h2: clamp(2.25rem, 5vw, 3.5rem);
+  --text-site-h2--line-height: 1.07;
+  --text-site-h2--letter-spacing: -0.04em;
+  --text-site-h2--font-weight: 700;
+  --text-site-statement: clamp(1.9rem, 4.4vw, 3.25rem);
+  --text-site-statement--line-height: 1.15;
+  --text-site-statement--letter-spacing: -0.035em;
+  --text-site-statement--font-weight: 600;
+  --text-site-h3: 1.75rem;
+  --text-site-h3--line-height: 1.14;
+  --text-site-h3--letter-spacing: -0.03em;
+  --text-site-h3--font-weight: 700;
+  --text-site-lede: clamp(1.1875rem, 2vw, 1.5rem);
+  --text-site-lede--line-height: 1.38;
+  --text-site-lede--letter-spacing: -0.02em;
+  --text-site-sub: 1.3125rem;
+  --text-site-sub--line-height: 1.38;
+  --text-site-sub--letter-spacing: -0.02em;
+  --text-site-body: 1.0625rem;
+  --text-site-body--line-height: 1.47;
+  --text-site-body--letter-spacing: -0.022em;
+  --text-site-small: 0.875rem;
+  --text-site-small--line-height: 1.43;
+  --text-site-small--letter-spacing: -0.01em;
+  --text-site-caption: 0.75rem;
+  --text-site-caption--line-height: 1.5;
+
+  /* Spacing: section rhythm and the content column. */
+  --spacing-section: 7.5rem;
+  --spacing-section-sm: 5.5rem;
+  --spacing-statement: 10rem;
+  --container-site: 67.5rem;
+
+  /* Radius scale. */
+  --radius-site-sm: 0.75rem;
+  --radius-site-md: 1.125rem;
+  --radius-site-lg: 1.75rem;
+
+  /* Motion: a gentle overshoot for small controls, a smooth settle for everything else. */
+  --ease-site-spring: cubic-bezier(0.34, 1.45, 0.64, 1);
+  --ease-site-smooth: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --animate-site-rise: site-rise 0.9s var(--ease-site-smooth) both;
+  --animate-site-drift: site-drift 26s ease-in-out infinite alternate;
+}
+
 @keyframes toast-in {
   from {
     opacity: 0;
@@ -194,25 +282,313 @@
   }
 }
 
-/* The one piece of page-load motion on the landing page: a note moves from Plan to Build. */
-@keyframes hero-note-move {
-  0%,
-  18% {
-    transform: translate(0, 0) rotate(0deg);
+/* ===========================================================================
+ * Site design system (landing page). Values live here; utilities are in @theme.
+ * =========================================================================== */
+
+@keyframes site-rise {
+  from {
+    opacity: 0;
+    filter: blur(10px);
+    transform: translateY(0.35em);
   }
-  30% {
-    transform: translate(0, -8px) rotate(-2deg);
-  }
-  78% {
-    transform: translate(340px, -120px) rotate(-2deg);
-  }
-  100% {
-    transform: translate(340px, -112px) rotate(0deg);
+  to {
+    opacity: 1;
+    filter: blur(0);
+    transform: none;
   }
 }
 
-.hero-note {
-  transform-box: fill-box;
-  transform-origin: center;
-  animation: hero-note-move 2.6s cubic-bezier(0.6, 0, 0.2, 1) 0.6s both;
+@keyframes site-drift {
+  from {
+    transform: translate(0, 0) scale(1);
+  }
+  to {
+    transform: translate(60px, 40px) scale(1.12);
+  }
+}
+
+.site {
+  --site-bg: #fbfbfd;
+  --site-bg-alt: #f5f5f7;
+  --site-surface: #ffffff;
+  --site-label: #1d1d1f;
+  /* #6e6e73 keeps 4.5:1 contrast on every light surface, including the alternate background. */
+  --site-label-2: #6e6e73;
+  /* Secondary text that sits on the aurora: darker, so it keeps 4.5:1 over the brightest tint. */
+  --site-label-on-tint: #424245;
+  --site-line: rgb(0 0 0 / 0.08);
+  --site-line-strong: #d2d2d7;
+  --site-accent: #0071e3;
+  --site-accent-hover: #0077ed;
+  --site-link: #0066cc;
+  /* Slightly deeper than #248a3d so "Saved" keeps 4.5:1 on every light surface. */
+  --site-success: #1d7a35;
+  --site-glass: rgb(255 255 255 / 0.62);
+  --site-plan: #e3effa;
+  --site-plan-card: #bcdcf5;
+  --site-build: #ebebfb;
+  --site-build-card: #c4c6f4;
+  --site-test: #e6f4ea;
+  --site-test-card: #bfe5c9;
+  --site-dot: rgb(0 0 0 / 0.09);
+  --site-shadow-lg: 0 30px 60px -20px rgb(0 0 0 / 0.18), 0 12px 24px -12px rgb(0 0 0 / 0.08);
+  --site-shadow-hover: 0 18px 36px -18px rgb(0 0 0 / 0.22);
+  --site-shadow-glass:
+    inset 0 1px 0 rgb(255 255 255 / 0.85), inset 0 0 0 1px rgb(255 255 255 / 0.28), 0 10px 30px -8px rgb(0 0 0 / 0.16),
+    0 2px 6px rgb(0 0 0 / 0.05);
+  --site-aurora-opacity: 0.75;
+
+  font-family: var(--font-site);
+  font-size: var(--text-site-body);
+  line-height: var(--text-site-body--line-height);
+  letter-spacing: var(--text-site-body--letter-spacing);
+  font-optical-sizing: auto;
+  -webkit-font-smoothing: antialiased;
+  background: var(--site-bg);
+  color: var(--site-label);
+  overflow-x: clip;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  .site {
+    --site-bg: #000000;
+    --site-bg-alt: #101012;
+    --site-surface: #1c1c1e;
+    --site-label: #f5f5f7;
+    --site-label-2: #a1a1a6;
+    --site-label-on-tint: #c7c7cc;
+    --site-line: rgb(255 255 255 / 0.12);
+    --site-line-strong: #3a3a3c;
+    --site-accent: #0071e3;
+    --site-accent-hover: #0077ed;
+    --site-link: #2997ff;
+    --site-success: #30d158;
+    --site-glass: rgb(30 30 32 / 0.62);
+    --site-plan: #13263a;
+    --site-plan-card: #1f3d61;
+    --site-build: #1d1c38;
+    --site-build-card: #302e62;
+    --site-test: #12291a;
+    --site-test-card: #1f4a2c;
+    --site-dot: rgb(255 255 255 / 0.08);
+    --site-shadow-lg: 0 30px 60px -20px rgb(0 0 0 / 0.7), 0 0 0 1px rgb(255 255 255 / 0.06);
+    --site-shadow-hover: 0 18px 36px -18px rgb(0 0 0 / 0.8);
+    --site-shadow-glass:
+      inset 0 1px 0 rgb(255 255 255 / 0.18), inset 0 0 0 1px rgb(255 255 255 / 0.1), 0 10px 30px -8px rgb(0 0 0 / 0.6);
+    --site-aurora-opacity: 0.32;
+    color-scheme: dark;
+  }
+}
+
+/* The page behind the landing page (overscroll on iOS) matches it, in both modes. */
+html:has(.site),
+body:has(.site) {
+  background: #fbfbfd;
+}
+@media (prefers-color-scheme: dark) {
+  html:has(.site),
+  body:has(.site) {
+    background: #000000;
+  }
+}
+
+@layer components {
+  /* Translucent material: a floating layer the page scrolls beneath. */
+  .site-glass {
+    background: var(--site-glass);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    backdrop-filter: blur(20px) saturate(180%);
+    box-shadow: var(--site-shadow-glass);
+  }
+
+  /* Soft colour fields behind the hero, templates and closing call to action. */
+  .site-aurora {
+    position: absolute;
+    inset: -20% -10% auto;
+    height: 56rem;
+    pointer-events: none;
+    filter: blur(60px) saturate(140%);
+    opacity: var(--site-aurora-opacity);
+  }
+  .site-aurora > i {
+    position: absolute;
+    display: block;
+    border-radius: 9999px;
+    animation: var(--animate-site-drift);
+  }
+  .site-aurora > i:nth-child(1) {
+    width: 32.5rem;
+    height: 32.5rem;
+    left: 8%;
+    top: 18%;
+    background: #9fd0ff;
+  }
+  .site-aurora > i:nth-child(2) {
+    width: 28.75rem;
+    height: 28.75rem;
+    left: 52%;
+    top: 8%;
+    background: #c9b8ff;
+    animation-delay: -8s;
+  }
+  .site-aurora > i:nth-child(3) {
+    width: 26.25rem;
+    height: 26.25rem;
+    left: 34%;
+    top: 46%;
+    background: #a8f0c6;
+    animation-delay: -16s;
+  }
+  .site-aurora > i:nth-child(4) {
+    width: 18.75rem;
+    height: 18.75rem;
+    left: 72%;
+    top: 44%;
+    background: #ffd2a8;
+    animation-delay: -4s;
+  }
+
+  .site-dots {
+    background-image: radial-gradient(var(--site-dot) 1px, transparent 1px);
+    background-size: 22px 22px;
+  }
+
+  /* "Learn more ›" style links. */
+  .site-link-arrow {
+    color: var(--site-link);
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+  }
+  .site-link-arrow:hover {
+    text-decoration: underline;
+  }
+  .site-link-arrow::after {
+    content: "›";
+    font-size: 1.25em;
+    line-height: 1;
+    transform: translateY(-1px);
+    transition: transform 0.3s var(--ease-site-spring);
+  }
+  .site-link-arrow:hover::after {
+    transform: translate(3px, -1px);
+  }
+
+  /* Every interactive element on the site gets the same, clearly visible focus ring. */
+  .site :focus-visible {
+    outline: 3px solid rgb(0 113 227 / 0.55);
+    outline-offset: 3px;
+    border-radius: 0.5rem;
+  }
+
+  /*
+   * Scroll-linked states. They apply only once the motion script has started
+   * (data-motion="on"), so without JavaScript, with reduced motion, and for
+   * search engines everything is fully visible and readable.
+   */
+  .site[data-motion="on"] [data-reveal] {
+    opacity: 0;
+    transform: translateY(40px) scale(0.98);
+    transition:
+      opacity 1s var(--ease-site-smooth),
+      transform 1s var(--ease-site-smooth);
+    transition-delay: var(--reveal-delay, 0ms);
+  }
+  .site[data-motion="on"] [data-reveal].is-in {
+    opacity: 1;
+    transform: none;
+  }
+  .site[data-motion="on"] [data-statement] > span {
+    opacity: 0.16;
+    transition: opacity 0.15s linear;
+  }
+  .site[data-motion="on"] [data-step]:not(.is-on) {
+    opacity: 0.25;
+    transform: translateX(-6px);
+  }
+  [data-step] {
+    transition:
+      opacity 0.5s var(--ease-site-smooth),
+      transform 0.5s var(--ease-site-smooth);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .site-aurora > i {
+    animation: none;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .site-glass {
+    background: var(--site-surface);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+
+@media (prefers-contrast: more) and (prefers-color-scheme: light) {
+  .site {
+    --site-label-2: #3a3a3c;
+    --site-line: rgb(0 0 0 / 0.4);
+  }
+}
+@media (prefers-contrast: more) and (prefers-color-scheme: dark) {
+  .site {
+    --site-label-2: #d1d1d6;
+    --site-line: rgb(255 255 255 / 0.45);
+  }
+}
+@media (prefers-contrast: more) {
+  .site-glass {
+    background: var(--site-surface);
+    box-shadow: 0 0 0 1px currentColor;
+  }
+}
+
+@keyframes site-cursor-drift {
+  0%,
+  100% {
+    transform: translate(0, 0);
+  }
+  50% {
+    transform: translate(28px, -14px);
+  }
+}
+
+@layer components {
+  /* The pinned story: notes are placed in percentages of the stage (container units). */
+  .site-story-stage {
+    container-type: size;
+  }
+  .site-story-note {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 30%;
+    transform-origin: 0 0;
+    transform: translate(calc(var(--x, 0) * 1cqw), calc(var(--y, 0) * 1cqh)) rotate(var(--r, 0deg)) scale(var(--s, 1));
+    will-change: transform, opacity;
+  }
+  .site-story-note [data-done] {
+    opacity: var(--done, 0);
+    transform: scale(calc(0.5 + var(--done, 0) * 0.5));
+  }
+  /* On small screens the story shows one step at a time, under the picture. */
+  @media (width < 64rem) {
+    .site[data-motion] [data-step]:not(.is-on) {
+      display: none;
+    }
+  }
+  .site-cursor {
+    animation: site-cursor-drift 7s ease-in-out infinite;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .site-cursor {
+    animation: none;
+  }
 }

@@ -3,8 +3,8 @@ import type { ButtonHTMLAttributes, ComponentProps, ReactNode } from "react";
 import { cn } from "@/lib/cn";
 import { Spinner } from "./spinner";
 
-export type ButtonVariant = "primary" | "secondary" | "ghost" | "outline" | "danger";
-export type ButtonSize = "sm" | "md" | "lg";
+export type ButtonVariant = "primary" | "secondary" | "ghost" | "outline" | "danger" | "accent" | "glass";
+export type ButtonSize = "sm" | "md" | "lg" | "xl";
 
 const base =
   "inline-flex items-center justify-center gap-2 whitespace-nowrap font-medium select-none " +
@@ -17,12 +17,17 @@ const variants: Record<ButtonVariant, string> = {
   outline: "bg-transparent text-ink border border-ink/80 hover:bg-ink hover:text-white rounded-full",
   ghost: "bg-transparent text-ink hover:bg-ink/6 rounded-control",
   danger: "bg-error text-white hover:bg-[#a53125] rounded-full",
+  // Site (landing) variants. They read the site tokens, so use them inside `.site`.
+  accent: "bg-site-accent text-white hover:bg-site-accent-hover rounded-full active:scale-[0.97]",
+  glass: "site-glass text-site-label rounded-full hover:brightness-105 active:scale-[1.04] ease-site-spring",
 };
 
 const sizes: Record<ButtonSize, string> = {
   sm: "h-8 px-3.5 text-[13px]",
   md: "h-10 px-5 text-sm",
   lg: "h-12 px-7 text-[15px]",
+  // At least 44px tall at any text size; grows rather than clipping when text is enlarged.
+  xl: "min-h-[3.25rem] px-7 py-3 text-site-body",
 };
 
 export function buttonClasses(variant: ButtonVariant = "primary", size: ButtonSize = "md", className?: string): string {
