@@ -13,6 +13,8 @@ import { analyze } from "./analyze";
 import { isAssistantEnabled } from "./flag";
 import { boardOnlySchema, editProposalSchema, proposalIdSchema, runAnalysisSchema } from "./schemas";
 import { errorCode, logAssistant } from "./telemetry";
+import { timedQuery } from "@/lib/perf/queries";
+import { logPerf } from "@/lib/perf/server";
 import type { AssistantAcceptResult, AssistantProposalRecord, AssistantRunResult, Finding } from "./types";
 
 /**
@@ -32,7 +34,7 @@ import type { AssistantAcceptResult, AssistantProposalRecord, AssistantRunResult
  * public.submit_operation, the same function the board UI uses.
  */
 
-async function context(scope: string): Promise<{ supabase: SupabaseClient; requestId: string }> {
+async function context(scope: string): Promise<{ supabase: SupabaseClient; requestId: string; userId: string }> {
   const requestId = newRequestId();
   if (!isAssistantEnabled()) {
     logAssistant(scope, { requestId, outcome: "disabled" });
@@ -41,7 +43,7 @@ async function context(scope: string): Promise<{ supabase: SupabaseClient; reque
   if (!getPublicEnv()) throw new AppError("NOT_CONFIGURED");
   const profile = await getCurrentProfile();
   if (!profile) throw new AppError("UNAUTHENTICATED");
-  return { supabase: await createClient(), requestId };
+  return { supabase: await createClient(), requestId, userId: profile.id };
 }
 
 function parse<S extends z.ZodType>(schema: S, input: unknown): z.infer<S> {
@@ -53,7 +55,7 @@ function parse<S extends z.ZodType>(schema: S, input: unknown): z.infer<S> {
 }
 
 async function rpc<T>(supabase: SupabaseClient, fn: string, args: Record<string, unknown>): Promise<T> {
-  const { data, error } = await supabase.rpc(fn, args);
+  const { data, error } = await timedQuery(fn, () => supabase.rpc(fn, args));
   if (error) throw toAppError(error);
   return data as T;
 }
@@ -83,10 +85,13 @@ function toCanvasObject(row: ObjectRow): CanvasObject {
 export async function runAssistantAnalysis(input: unknown): Promise<ActionResult<AssistantRunResult>> {
   const started = Date.now();
   let requestId: string | undefined;
+  let perfContext: { boardId?: string; userId?: string } | undefined;
   try {
     const ctx = await context("assistant.run");
     requestId = ctx.requestId;
+    perfContext = { userId: ctx.userId };
     const request = parse(runAnalysisSchema, input);
+    perfContext.boardId = request.boardId;
     const { supabase } = ctx;
 
     // Before any board content is read, the database checks membership (a non-member gets
@@ -138,6 +143,14 @@ export async function runAssistantAnalysis(input: unknown): Promise<ActionResult
       p_findings: result.findings.map(findingPayload),
     });
 
+    logPerf({
+      action: "assistant_run",
+      source: "server",
+      durationMs: Date.now() - started,
+      outcome: "ok",
+      boardId: request.boardId,
+      userId: ctx.userId,
+    });
     logAssistant("assistant.run", {
       requestId,
       action: request.action,
@@ -153,6 +166,14 @@ export async function runAssistantAnalysis(input: unknown): Promise<ActionResult
       truncated: result.truncated,
     });
   } catch (error) {
+    logPerf({
+      action: "assistant_run",
+      source: "server",
+      durationMs: Date.now() - started,
+      outcome: "error",
+      code: errorCode(error),
+      ...(perfContext ?? {}),
+    });
     logAssistant("assistant.run", {
       requestId: requestId ?? "none",
       outcome: "error",
@@ -252,13 +273,31 @@ export async function rejectAssistantProposal(input: unknown): Promise<ActionRes
  * retry returns the original result and can never create a second object.
  */
 export async function acceptAssistantProposal(input: unknown): Promise<ActionResult<AssistantAcceptResult>> {
+  const started = Date.now();
   let requestId: string | undefined;
+  let perfContext: { boardId?: string; userId?: string } | undefined;
   try {
     const ctx = await context("assistant.accept");
     requestId = ctx.requestId;
-    const { proposalId } = parse(proposalIdSchema, input);
+    const { boardId, proposalId } = parse(proposalIdSchema, input);
+    perfContext = { boardId, userId: ctx.userId };
     const result = await rpc<AssistantAcceptResult>(ctx.supabase, "assistant_accept_proposal", {
       p_proposal_id: proposalId,
+    });
+    logPerf({
+      action: "proposal_accept",
+      source: "server",
+      durationMs: Date.now() - started,
+      outcome:
+        result.status === "applied" || result.status === "already_applied"
+          ? "ok"
+          : result.status === "stale"
+            ? "stale"
+            : result.status === "failed"
+              ? "error"
+              : "rejected",
+      ...(result.status === "failed" ? { code: result.code } : {}),
+      ...perfContext,
     });
     logAssistant("assistant.accept", {
       requestId,
@@ -274,6 +313,14 @@ export async function acceptAssistantProposal(input: unknown): Promise<ActionRes
     });
     return actionSuccess(result);
   } catch (error) {
+    logPerf({
+      action: "proposal_accept",
+      source: "server",
+      durationMs: Date.now() - started,
+      outcome: "error",
+      code: errorCode(error),
+      ...(perfContext ?? {}),
+    });
     return fail("assistant.accept", requestId, error);
   }
 }

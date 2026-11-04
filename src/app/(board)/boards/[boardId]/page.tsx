@@ -10,6 +10,7 @@ import type { BoardState } from "@/lib/board/types";
 import { getBoardMembers, isUuid, loadBoardState } from "@/lib/boards/data";
 import { isAssistantEnabled } from "@/lib/assistant/flag";
 import { toAppError } from "@/lib/errors";
+import { timeServer } from "@/lib/perf/server";
 
 export const metadata: Metadata = { title: "Board" };
 
@@ -26,8 +27,14 @@ async function BoardLoader({ params, searchParams }: { params: Params; searchPar
   let loaded: { state: BoardState; members: Member[] } | null = null;
   let failure: string | null = null;
   try {
-    const state = await loadBoardState(boardId);
-    if (state) loaded = { state, members: await getBoardMembers(boardId) };
+    loaded = await timeServer(
+      "board_open",
+      { boardId: isUuid(boardId) ? boardId : undefined, userId: profile.id },
+      async () => {
+        const state = await loadBoardState(boardId);
+        return state ? { state, members: await getBoardMembers(boardId) } : null;
+      },
+    );
   } catch (error) {
     const appError = toAppError(error);
     if (appError.code !== "BOARD_NOT_FOUND" && appError.code !== "BOARD_ACCESS_DENIED") failure = appError.message;

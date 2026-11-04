@@ -64,6 +64,8 @@ interface CanvasStageProps {
   onPointerWorld: (point: Point) => void;
   onContextMenu: (id: string | null, screen: Point) => void;
   onCommentTarget: (id: string | null) => void;
+  /** Called on the first pointer press on the canvas (for timing). */
+  onFirstInteraction?: () => void;
   /** A temporary Assistant preview. Drawn only; never stored, sent or added to undo history. */
   ghost?: Pick<CanvasObject, "type" | "x" | "y" | "width" | "height" | "props"> | null;
 }
@@ -108,6 +110,7 @@ export function CanvasStage({
   onContextMenu,
   onCommentTarget,
   ghost = null,
+  onFirstInteraction,
 }: CanvasStageProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const interaction = useRef<Interaction | null>(null);
@@ -487,7 +490,10 @@ export function CanvasStage({
         // Dots become noise when zoomed far out.
         backgroundImage: camera.zoom < 0.4 ? "none" : undefined,
       }}
-      onPointerDown={onPointerDown}
+      onPointerDown={(event) => {
+        onFirstInteraction?.();
+        onPointerDown(event);
+      }}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
       onPointerCancel={onPointerUp}

@@ -5,6 +5,7 @@ import type { BoardState, BoardSummary } from "@/lib/board/types";
 import type { Member } from "@/lib/board/services";
 import { getPublicEnv } from "@/lib/env";
 import { logServerError } from "@/lib/log";
+import { timedQuery } from "@/lib/perf/queries";
 import { createClient } from "@/lib/supabase/server";
 import type { BoardListItem, BoardScope, Notifications, TemplateRow } from "./types";
 
@@ -23,7 +24,7 @@ export function isUuid(value: string): boolean {
 async function rpc<T>(scope: string, fn: string, args?: Record<string, unknown>): Promise<T> {
   if (!getPublicEnv()) throw new AppError("NOT_CONFIGURED");
   const supabase = await createClient();
-  const { data, error } = await supabase.rpc(fn, args);
+  const { data, error } = await timedQuery(fn, () => supabase.rpc(fn, args));
   if (error) {
     const appError = toAppError(error);
     if (appError.code === "UNKNOWN") logServerError(scope, error);
@@ -75,10 +76,12 @@ export function getBoardMembers(boardId: string): Promise<Member[]> {
 export async function listTemplates(): Promise<TemplateRow[]> {
   if (!getPublicEnv()) throw new AppError("NOT_CONFIGURED");
   const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("templates")
-    .select("id, slug, name, description, category, min_plan, is_featured, sort_order, content")
-    .order("sort_order", { ascending: true });
+  const { data, error } = await timedQuery("templates", () =>
+    supabase
+      .from("templates")
+      .select("id, slug, name, description, category, min_plan, is_featured, sort_order, content")
+      .order("sort_order", { ascending: true }),
+  );
   if (error) {
     logServerError("templates.list", error);
     throw toAppError(error);

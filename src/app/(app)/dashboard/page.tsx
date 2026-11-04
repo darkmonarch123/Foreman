@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { Suspense, type ReactNode } from "react";
 import { BoardCard } from "@/components/app/board-card";
 import { WhatsNewAnnouncement } from "@/components/app/whats-new-announcement";
+import { PerfMark } from "@/components/perf-mark";
 import { LinkButton } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { LoadingRegion, Skeleton } from "@/components/ui/skeleton";
@@ -12,6 +13,7 @@ import { requireProfile } from "@/lib/auth/dal";
 import { listBoards } from "@/lib/boards/data";
 import type { BoardListItem, BoardScope } from "@/lib/boards/types";
 import { toAppError } from "@/lib/errors";
+import { timeServer } from "@/lib/perf/server";
 
 export const metadata: Metadata = { title: "Dashboard" };
 
@@ -75,7 +77,7 @@ async function DashboardContent({ searchParams }: { searchParams: Search }) {
 
   let boards: BoardListItem[];
   try {
-    boards = await listBoards(scope, query);
+    boards = await timeServer("dashboard_load", { userId: profile.id }, () => listBoards(scope, query));
   } catch (error) {
     return (
       <>
@@ -209,6 +211,7 @@ async function DashboardContent({ searchParams }: { searchParams: Search }) {
   return (
     <>
       <PageHeader title={`Hello, ${profile.first_name}`} />
+      <PerfMark action="dashboard_load" />
       {announcement}
       <Section title="Recent boards">
         <BoardGrid boards={boards.slice(0, 4)} />

@@ -36,6 +36,7 @@ import { createLocalPendingStore, type PendingStore } from "@/lib/board/storage"
 import { TOOLS, isTypingTarget, toolForKey, type Tool } from "@/lib/board/tools";
 import type { BoardState, BoardSummary, CanvasProps } from "@/lib/board/types";
 import { ERROR_CATALOG, errorMessage, toAppError } from "@/lib/errors";
+import { startTimer } from "@/lib/perf/client";
 import { AssistantPanel, type AssistantIntent } from "./assistant-panel";
 import { BoardTopBar } from "./board-top-bar";
 import { CanvasStage, type RemoteCursor } from "./canvas-stage";
@@ -123,6 +124,12 @@ export function BoardWorkspace({
     engine.start();
     return () => engine.dispose();
   }, [engine]);
+
+  // Board open: from the start of the page load to the first painted board.
+  const firstInteraction = useRef(false);
+  useEffect(() => {
+    startTimer("board_open", { boardId, startedAt: 0 }).endAfterPaint();
+  }, [boardId]);
 
   useEffect(() => {
     engine.setCanEdit(canEdit);
@@ -814,8 +821,23 @@ export function BoardWorkspace({
             editingId={editingId}
             onEditingChange={setEditingId}
             cursors={cursors}
-            onCreate={(payload) => engine.create(payload)}
-            onMove={(id, position) => void engine.move(id, position)}
+            onCreate={(payload) => {
+              const timer = startTimer("object_create", { boardId });
+              const id = engine.create(payload);
+              // The object is drawn optimistically; this measures action to visible feedback.
+              if (id) timer.endAfterPaint();
+              else timer.end("rejected");
+              return id;
+            }}
+            onMove={(id, position) => {
+              const timer = startTimer("object_move", { boardId });
+              if (engine.move(id, position)) timer.endAfterPaint();
+            }}
+            onFirstInteraction={() => {
+              if (firstInteraction.current) return;
+              firstInteraction.current = true;
+              startTimer("canvas_first_interaction", { boardId }).endAfterPaint();
+            }}
             onUpdate={(id, changes) => void engine.update(id, changes)}
             onRemove={removeObject}
             onPointerWorld={(point) => services.realtime.sendCursor(point.x, point.y)}
@@ -931,6 +953,7 @@ export function BoardWorkspace({
           <div className="absolute inset-y-0 right-0 z-20 shadow-lift md:static md:shadow-none">
             <AssistantPanel
               services={assistant}
+              boardId={boardId}
               canEdit={canEdit}
               online={online}
               objectsById={snapshot.byId}
@@ -1023,7 +1046,15 @@ export function BoardWorkspace({
                   objectsById={snapshot.byId}
                   onFocusObject={focusObject}
                   onAdd={async (body, objectId) => {
-                    const created = await services.addComment(body, objectId);
+                    const timer = startTimer("comment_create", { boardId });
+                    let created: Awaited<ReturnType<typeof services.addComment>>;
+                    try {
+                      created = await services.addComment(body, objectId);
+                    } catch (error) {
+                      timer.end("error", toAppError(error).code);
+                      throw error;
+                    }
+                    timer.endAfterPaint();
                     // The realtime event may arrive first; add only if it has not.
                     setComments((current) =>
                       current.items && !current.items.some((comment) => comment.id === created.id)

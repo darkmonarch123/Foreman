@@ -11,6 +11,7 @@ import { listTemplates } from "@/lib/boards/data";
 import type { TemplateRow } from "@/lib/boards/types";
 import { cn } from "@/lib/cn";
 import { toAppError } from "@/lib/errors";
+import { timeServer } from "@/lib/perf/server";
 import { TEMPLATE_CATEGORIES, type TemplateCategory } from "@/lib/templates/catalog";
 import { PLANS, formatCapacity } from "@/lib/templates/plans";
 
@@ -44,7 +45,7 @@ async function TemplatesContent({ searchParams }: { searchParams: Search }) {
 
   let all: TemplateRow[];
   try {
-    all = await listTemplates();
+    all = await timeServer("template_search", { userId: profile.id }, () => listTemplates());
   } catch (error) {
     return (
       <EmptyState

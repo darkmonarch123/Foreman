@@ -21,6 +21,7 @@ import {
 import type { CanvasObject, ServerOperation } from "@/lib/board/types";
 import { cn } from "@/lib/cn";
 import { errorMessage, toAppError } from "@/lib/errors";
+import { startTimer } from "@/lib/perf/client";
 
 /** A request from outside the panel (the toolbar, context menu or a shortcut) to run something. */
 export interface AssistantIntent {
@@ -32,6 +33,8 @@ export interface AssistantIntent {
 
 interface AssistantPanelProps {
   services: AssistantServices;
+  /** For timing only. */
+  boardId?: string;
   canEdit: boolean;
   online: boolean;
   /** Live board objects, by id, used to spot stale proposals before the server is asked. */
@@ -87,6 +90,7 @@ function describeDraft(draft: ProposalDraft): string {
 
 export function AssistantPanel({
   services,
+  boardId,
   canEdit,
   online,
   objectsById,
@@ -171,6 +175,7 @@ export function AssistantPanel({
       runStarted.current = true;
       setPhase("running");
       onAnnounce(`Foreman Assistant: ${ASSISTANT_ACTION_LABELS[nextAction].label} is running`);
+      const timer = startTimer("assistant_run", { boardId });
       try {
         const result = await services.run({
           action: nextAction,
@@ -184,12 +189,14 @@ export function AssistantPanel({
           truncated: result.truncated,
         });
         setHasRun(true);
+        timer.endAfterPaint();
         onAnnounce(
           result.proposals.length === 0
             ? "Foreman Assistant finished. No high-confidence planning gaps found."
             : `Foreman Assistant finished. ${result.proposals.length} ${result.proposals.length === 1 ? "finding" : "findings"}.`,
         );
       } catch (caught) {
+        timer.end("error", toAppError(caught).code);
         const message = errorMessage(caught);
         setError(message);
         onAnnounce(`Foreman Assistant could not finish. ${message}`);
@@ -197,7 +204,7 @@ export function AssistantPanel({
         setPhase("idle");
       }
     },
-    [services, selected, guidance, onAnnounce, setPreviewing],
+    [services, selected, guidance, onAnnounce, setPreviewing, boardId],
   );
 
   // A request from the toolbar, context menu or shortcut. Handled once per nonce.
@@ -223,8 +230,19 @@ export function AssistantPanel({
       next.delete(record.id);
       return next;
     });
+    const timer = startTimer("proposal_accept", { boardId });
     try {
       const result: AssistantAcceptResult = await services.accept(record.id);
+      timer.endAfterPaint(
+        result.status === "applied" || result.status === "already_applied"
+          ? "ok"
+          : result.status === "stale"
+            ? "stale"
+            : result.status === "failed"
+              ? "error"
+              : "rejected",
+        result.status === "failed" ? result.code : undefined,
+      );
       setPreviewing(null, null);
       switch (result.status) {
         case "applied":
@@ -257,6 +275,7 @@ export function AssistantPanel({
       }
     } catch (caught) {
       const code = toAppError(caught).code;
+      timer.end("error", code);
       const message =
         code === "BOARD_ACCESS_DENIED"
           ? "You no longer have permission to apply changes on this board."
