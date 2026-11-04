@@ -1,4 +1,5 @@
 import { defaultPayload } from "@/lib/board/defaults";
+import { planningClarity } from "./clarity";
 import { buildCtx, readingOrder, type Ctx } from "./context";
 import { explainBoard, explainObject } from "./explain";
 import { boxOf, findFreeSpot, type Box } from "./geometry";
@@ -9,6 +10,7 @@ import { round2 } from "./text";
 import {
   MAX_FINDINGS,
   MAX_PROPOSAL_TEXT,
+  FOCUS_RULES,
   MIN_CONFIDENCE,
   RULE_IDS,
   type AnalysisInput,
@@ -94,6 +96,8 @@ export function analyze(input: AnalysisInput): AnalysisResult {
   const guidance = parseGuidance(input.guidance);
   const ctx = buildCtx(input.objects, input.comments, (note) => mentionsAny(note.text, guidance.terms));
   const template = input.template ?? null;
+  const focus = input.focus ?? "everything";
+  const clarity = planningClarity(ctx);
   const result = (findings: Finding[], truncated = false, suppressed = 0): AnalysisResult => ({
     findings,
     exclusions: guidance.terms,
@@ -101,6 +105,8 @@ export function analyze(input: AnalysisInput): AnalysisResult {
     truncated,
     suppressed,
     template,
+    focus,
+    clarity,
   });
 
   const contextId = input.context.kind === "object" ? input.context.objectId : null;
@@ -119,7 +125,9 @@ export function analyze(input: AnalysisInput): AnalysisResult {
 
   const raws: RawFinding[] = [];
   const seen = new Set<string>();
+  const focused = focus === "everything" ? null : new Set<RuleId>(FOCUS_RULES[focus]);
   for (const id of RULES_FOR[input.action]) {
+    if (focused && !focused.has(id)) continue;
     for (const raw of RULES[id](ctx)) {
       const key = `${raw.rule_id}:${raw.evidence.map((item) => item.object_id).join(",")}`;
       if (seen.has(key)) continue;

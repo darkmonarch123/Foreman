@@ -13,6 +13,8 @@ export const ASSISTANT_PREFIXES = [
   "Connect:",
   "Separate:",
   "Next step:",
+  "Owner:",
+  "Risk:",
 ] as const;
 
 export function isAssistantNote(text: string): boolean {

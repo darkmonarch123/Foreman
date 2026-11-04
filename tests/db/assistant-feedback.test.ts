@@ -207,3 +207,14 @@ describe("snapshot template", () => {
     expect(snapshot.template.slug).toBe(template.slug);
   });
 });
+
+describe("v1.2 rule ids", () => {
+  it("accepts the four extraction rules and still rejects unknown ones", async () => {
+    for (const rule of ["extracted_decision", "extracted_owner", "extracted_risk", "extracted_next_step"]) {
+      await db.admin("truncate private.rate_limits");
+      const proposal = await run(fx.owner, { rule_id: rule, fingerprint: null });
+      expect(proposal.id).toBeTruthy();
+    }
+    await expectCode(run(fx.owner, { rule_id: "made_up_rule", fingerprint: null }), "VALIDATION_FAILED");
+  });
+});

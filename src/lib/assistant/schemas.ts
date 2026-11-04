@@ -1,6 +1,7 @@
 import { z } from "zod";
 import {
   ASSISTANT_ACTIONS,
+  ASSISTANT_FOCUSES,
   FEEDBACK_REASONS,
   MAX_GUIDANCE,
   MAX_PROPOSAL_TEXT,
@@ -54,6 +55,7 @@ export const runAnalysisSchema = z
     action: z.enum(ASSISTANT_ACTIONS),
     context: analysisContextSchema,
     guidance: z.string().trim().max(MAX_GUIDANCE, `Keep guidance under ${MAX_GUIDANCE} characters.`).optional(),
+    focus: z.enum(ASSISTANT_FOCUSES).optional(),
   })
   .strict();
 

@@ -35,6 +35,11 @@ export const RULE_IDS = [
   "overlapping_objects",
   "theme_without_decision",
   "open_question_without_next_step",
+  // v1.2: action extraction
+  "extracted_decision",
+  "extracted_owner",
+  "extracted_risk",
+  "extracted_next_step",
 ] as const;
 export type RuleId = (typeof RULE_IDS)[number];
 
@@ -48,7 +53,46 @@ export const RULE_LABELS: Record<RuleId, string> = {
   overlapping_objects: "Overlapping items",
   theme_without_decision: "Themes without a decision",
   open_question_without_next_step: "Questions without a next step",
+  extracted_decision: "Decisions to record",
+  extracted_owner: "Owners to record",
+  extracted_risk: "Risks to record",
+  extracted_next_step: "Next steps to record",
 };
+
+/** v1.2 follow-up: "What should Assistant focus on?" */
+export const ASSISTANT_FOCUSES = ["everything", "decisions", "owners", "risks", "next_steps"] as const;
+export type AssistantFocus = (typeof ASSISTANT_FOCUSES)[number];
+
+export const FOCUS_LABELS: Record<AssistantFocus, string> = {
+  everything: "Everything",
+  decisions: "Decisions",
+  owners: "Owners",
+  risks: "Risks",
+  next_steps: "Next steps",
+};
+
+/** Which kinds of finding each focus keeps. "Everything" keeps all of them. */
+export const FOCUS_RULES: Record<Exclude<AssistantFocus, "everything">, readonly RuleId[]> = {
+  decisions: ["unanswered_question", "theme_without_decision", "extracted_decision"],
+  owners: ["action_without_owner", "extracted_owner"],
+  risks: ["extracted_risk", "theme_without_decision"],
+  next_steps: ["open_question_without_next_step", "extracted_next_step", "vague_note"],
+};
+
+/** Planning clarity: how ready the board is to act on, 0–100. */
+export interface PlanningClarity {
+  score: number;
+  /** Each part, 0–1, with how much it counts towards the score. */
+  parts: {
+    id: "decisions" | "owners" | "next_steps" | "clarity" | "structure";
+    label: string;
+    value: number;
+    weight: number;
+  }[];
+  strengths: string[];
+  gaps: string[];
+  improvements: string[];
+}
 
 /** Object types the Assistant may ask to create. Drawings are never proposed. */
 export const PROPOSAL_OBJECT_TYPES = ["STICKY_NOTE", "TEXT", "RECTANGLE", "CIRCLE", "ARROW"] as const;
@@ -170,6 +214,8 @@ export interface AnalysisInput {
   template?: AssistantTemplateContext | null;
   /** Milliseconds since the epoch, for freshness. Defaults to Date.now(). */
   now?: number;
+  /** v1.2: keep only the kinds of finding for one focus. Default "everything". */
+  focus?: AssistantFocus;
   /**
    * False skips suppression, merging and combining and keeps the v1 order (confidence, rule,
    * evidence), so each rule can be tested on its own. Scores are still attached. Default true.
@@ -188,6 +234,9 @@ export interface AnalysisResult {
   /** How many findings were left out because of the caller's feedback (hidden or marked not helpful). */
   suppressed: number;
   template: AssistantTemplateContext | null;
+  focus: AssistantFocus;
+  /** Null for an empty board. */
+  clarity: PlanningClarity | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -227,6 +276,7 @@ export interface AssistantRunRequest {
   action: AssistantAction;
   context: AnalysisContext;
   guidance?: string;
+  focus?: AssistantFocus;
 }
 
 export interface AssistantRunResult {
@@ -236,6 +286,8 @@ export interface AssistantRunResult {
   truncated: boolean;
   suppressed?: number;
   template?: AssistantTemplateContext | null;
+  focus?: AssistantFocus;
+  clarity?: PlanningClarity | null;
 }
 
 export interface FeedbackRequest {

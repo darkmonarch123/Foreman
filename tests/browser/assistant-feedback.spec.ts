@@ -26,3 +26,27 @@ test("feedback hides a type of finding on the next run and can be undone", async
     .click();
   await expect(panel.getByRole("list", { name: "Hidden types of finding" })).toHaveCount(0);
 });
+
+test("planning clarity and the focus follow-up", async ({ openBoard }) => {
+  const page = await openBoard("ada");
+  await page.getByRole("button", { name: "Foreman Assistant" }).click();
+  const panel = page.getByRole("complementary", { name: "Foreman Assistant" });
+  await panel.getByRole("button", { name: "Run" }).click();
+  const meter = panel.getByRole("meter", { name: "Planning clarity" });
+  await expect(meter).toBeVisible();
+  const score = Number(await meter.getAttribute("aria-valuenow"));
+  expect(score).toBeGreaterThanOrEqual(0);
+  expect(score).toBeLessThanOrEqual(100);
+  await expect(panel.getByText("What would improve it")).toBeVisible();
+  if (process.env.FOREMAN_SCREENSHOT_DIR) {
+    await panel.screenshot({ path: `${process.env.FOREMAN_SCREENSHOT_DIR}/assistant-clarity.png` });
+  }
+
+  const focus = panel.getByRole("group", { name: "What should Assistant focus on?" });
+  await expect(focus.getByRole("button", { name: "Everything" })).toHaveAttribute("aria-pressed", "true");
+  await focus.getByRole("button", { name: "Next steps" }).click();
+  await expect(focus.getByRole("button", { name: "Next steps" })).toHaveAttribute("aria-pressed", "true");
+  for (const title of await panel.locator("li[aria-labelledby^='finding-'] h4").allTextContents()) {
+    expect(title).toMatch(/next step|Vague|Empty|notes could be clearer/i);
+  }
+});

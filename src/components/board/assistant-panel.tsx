@@ -10,7 +10,9 @@ import { CONFIDENCE_BANDS, confidenceBand } from "@/lib/assistant/bands";
 import {
   ASSISTANT_ACTION_LABELS,
   ASSISTANT_ACTIONS,
+  ASSISTANT_FOCUSES,
   DEFAULT_VISIBLE_FINDINGS,
+  FOCUS_LABELS,
   FEEDBACK_REASONS,
   FEEDBACK_REASON_LABELS,
   MAX_GUIDANCE,
@@ -18,7 +20,9 @@ import {
   RULE_LABELS,
   type AssistantAction,
   type AssistantFeedback,
+  type AssistantFocus,
   type AssistantTemplateContext,
+  type PlanningClarity,
   type FeedbackReason,
   type FeedbackRequest,
   type RuleId,
@@ -136,6 +140,8 @@ export function AssistantPanel({
     truncated: boolean;
     suppressed: number;
     template: AssistantTemplateContext | null;
+    focus: AssistantFocus;
+    clarity: PlanningClarity | null;
   } | null>(null);
   const [showAll, setShowAll] = useState(false);
   const [hiddenRules, setHiddenRules] = useState<string[] | null>(null);
@@ -189,7 +195,7 @@ export function AssistantPanel({
   }, [services]);
 
   const run = useCallback(
-    async (nextAction: AssistantAction, nextContext: "board" | "object") => {
+    async (nextAction: AssistantAction, nextContext: "board" | "object", nextFocus: AssistantFocus = "everything") => {
       setError(null);
       setNotices(new Map());
       setEditingId(null);
@@ -207,6 +213,7 @@ export function AssistantPanel({
           action: nextAction,
           context: nextContext === "object" && selected ? { kind: "object", objectId: selected.id } : { kind: "board" },
           ...(guidance.trim() ? { guidance: guidance.trim() } : {}),
+          ...(nextFocus !== "everything" ? { focus: nextFocus } : {}),
         });
         setItems(byUsefulness(result.proposals));
         setShowAll(false);
@@ -216,6 +223,8 @@ export function AssistantPanel({
           guidanceIgnored: result.guidanceIgnored,
           truncated: result.truncated,
           suppressed: result.suppressed ?? 0,
+          focus: result.focus ?? nextFocus,
+          clarity: result.clarity ?? null,
           template: result.template ?? null,
         });
         setHasRun(true);
@@ -533,6 +542,35 @@ export function AssistantPanel({
               </li>
             ))}
           </ul>
+        ) : null}
+
+        {meta?.clarity && phase === "idle" ? <ClarityCard clarity={meta.clarity} /> : null}
+
+        {hasRun && !explainOnly && phase !== "loading" ? (
+          <div role="group" aria-labelledby="assistant-focus" className="mt-4">
+            <p id="assistant-focus" className="text-sm font-medium">
+              What should Assistant focus on?
+            </p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {ASSISTANT_FOCUSES.map((option) => (
+                <button
+                  key={option}
+                  type="button"
+                  aria-pressed={(meta?.focus ?? "everything") === option}
+                  disabled={phase !== "idle"}
+                  onClick={() => void run(action, contextKind, option)}
+                  className={cn(
+                    "min-h-9 rounded-full border px-3.5 text-[13px] transition-colors disabled:opacity-50 pointer-coarse:min-h-11",
+                    (meta?.focus ?? "everything") === option
+                      ? "border-accent bg-accent text-on-accent"
+                      : "border-line bg-surface hover:border-line-strong",
+                  )}
+                >
+                  {FOCUS_LABELS[option]}
+                </button>
+              ))}
+            </div>
+          </div>
         ) : null}
 
         <div className="mt-5" aria-busy={phase !== "idle"}>
@@ -929,5 +967,63 @@ function FeedbackControls({
         </div>
       ) : null}
     </div>
+  );
+}
+
+/** Planning clarity, 0–100, with what is good, what is missing and what would help most. */
+function ClarityCard({ clarity }: { clarity: PlanningClarity }) {
+  const tone = clarity.score >= 75 ? "bg-success" : clarity.score >= 50 ? "bg-warning" : "bg-danger";
+  return (
+    <section aria-labelledby="clarity-heading" className="mt-4 rounded-card border border-line bg-surface p-4">
+      <div className="flex items-baseline justify-between gap-3">
+        <h3 id="clarity-heading" className="text-sm font-medium">
+          Planning clarity
+        </h3>
+        <p className="text-sm">
+          <span className="font-display text-2xl tabular-nums">{clarity.score}</span>
+          <span className="text-muted">/100</span>
+        </p>
+      </div>
+      <div
+        role="meter"
+        aria-labelledby="clarity-heading"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={clarity.score}
+        className="mt-2 h-1.5 overflow-hidden rounded-full bg-sunken"
+      >
+        <div className={cn("h-full rounded-full", tone)} style={{ width: `${clarity.score}%` }} />
+      </div>
+      {clarity.strengths.length > 0 ? (
+        <>
+          <h4 className="mt-3 text-xs font-medium text-muted">Strengths</h4>
+          <ul className="mt-1 list-disc pl-4 text-sm leading-relaxed">
+            {clarity.strengths.map((text) => (
+              <li key={text}>{text}</li>
+            ))}
+          </ul>
+        </>
+      ) : null}
+      {clarity.gaps.length > 0 ? (
+        <>
+          <h4 className="mt-3 text-xs font-medium text-muted">Gaps</h4>
+          <ul className="mt-1 list-disc pl-4 text-sm leading-relaxed">
+            {clarity.gaps.map((text) => (
+              <li key={text}>{text}</li>
+            ))}
+          </ul>
+        </>
+      ) : null}
+      {clarity.improvements.length > 0 ? (
+        <>
+          <h4 className="mt-3 text-xs font-medium text-muted">What would improve it</h4>
+          <ul className="mt-1 list-disc pl-4 text-sm leading-relaxed">
+            {clarity.improvements.map((text) => (
+              <li key={text}>{text}</li>
+            ))}
+          </ul>
+        </>
+      ) : null}
+    </section>
   );
 }

@@ -110,6 +110,7 @@ export class MemoryAssistant {
       guidance: request.guidance,
       feedback: this.summary(userId),
       template: templateContextFor(this.template),
+      focus: request.focus,
     });
     for (const [id, record] of this.proposals) {
       if (this.owners.get(id) === userId && record.status === "pending") {
@@ -156,6 +157,8 @@ export class MemoryAssistant {
       truncated: result.truncated,
       suppressed: result.suppressed,
       template: result.template,
+      focus: result.focus,
+      clarity: result.clarity,
     };
   }
 

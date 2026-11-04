@@ -154,6 +154,7 @@ export async function runAssistantAnalysis(input: unknown): Promise<ActionResult
       guidance: request.guidance,
       feedback: snapshot.feedback ?? null,
       template: templateContextFor(snapshot.template),
+      focus: request.focus,
     });
 
     const proposals = await rpc<AssistantProposalRecord[]>(supabase, "assistant_create_run", {
@@ -188,6 +189,8 @@ export async function runAssistantAnalysis(input: unknown): Promise<ActionResult
       truncated: result.truncated,
       suppressed: result.suppressed,
       template: result.template,
+      focus: result.focus,
+      clarity: result.clarity,
     });
   } catch (error) {
     logPerf({
