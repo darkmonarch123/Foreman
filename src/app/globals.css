@@ -92,6 +92,10 @@
   --text-label: 0.8125rem;
   --text-label--line-height: 1.35;
 
+  /* Layout breakpoints: phone below `tablet` (744px, iPad mini portrait); the full desktop
+     board toolbar from `xl` (1280px). */
+  --breakpoint-tablet: 46.5rem;
+
   /* Spacing beyond Tailwind's 4px scale: touch targets and the gap between them. */
   --spacing-touch: 2.75rem;
   --spacing-touch-gap: 0.75rem;

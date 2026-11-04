@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, Download, PanelRight, Redo2, Settings, Share2, Sparkles, Undo2 } from "lucide-react";
+import { ArrowLeft, Download, MessageSquare, PanelRight, Redo2, Settings, Share2, Sparkles, Undo2 } from "lucide-react";
 import Link from "next/link";
 import { useRef, useState } from "react";
 import { ProfileMenu } from "@/components/app/profile-menu";
@@ -9,6 +9,7 @@ import { RoleBadge, StatusBadge, type SyncStatus } from "@/components/ui/badge";
 import { Button, IconButton } from "@/components/ui/button";
 import { Tooltip } from "@/components/ui/tooltip";
 import { Wordmark } from "@/components/ui/wordmark";
+import { MoreMenu, type MoreActions } from "./board-toolbar";
 import type { BoardRole } from "@/lib/board/types";
 import { boardTitleSchema } from "@/lib/boards/schemas";
 
@@ -31,7 +32,17 @@ interface BoardTopBarProps {
   assistantAvailable?: boolean;
   assistantOpen?: boolean;
   onToggleAssistant?: () => void;
-  currentUser: { first_name: string; last_name: string; username: string; avatar_url: string };
+  onComments?: () => void;
+  commentsOpen?: boolean;
+  more?: MoreActions;
+  currentUser: {
+    first_name: string;
+    last_name: string;
+    username: string;
+    avatar_url: string;
+    email?: string;
+    theme_preference?: "system" | "light" | "dark";
+  };
 }
 
 export function BoardTopBar({
@@ -53,6 +64,9 @@ export function BoardTopBar({
   assistantAvailable = false,
   assistantOpen = false,
   onToggleAssistant,
+  onComments,
+  commentsOpen = false,
+  more,
   currentUser,
 }: BoardTopBarProps) {
   const isOwner = role === "OWNER";
@@ -91,7 +105,9 @@ export function BoardTopBar({
   }
 
   return (
-    <header className="z-20 flex h-14 shrink-0 items-center gap-2 border-b border-line bg-surface px-2 sm:px-3">
+    // Phone: a compact bar floating over the board, below the status bar / notch.
+    // Tablet and up: a full-width bar above the board.
+    <header className="absolute inset-x-2 top-[max(0.5rem,env(safe-area-inset-top))] z-20 flex h-14 shrink-0 items-center gap-1 rounded-sheet border border-line bg-elevated px-1.5 shadow-soft tablet:static tablet:gap-2 tablet:rounded-none tablet:border-0 tablet:border-b tablet:bg-surface tablet:px-3 tablet:shadow-none">
       <Tooltip label="Back to dashboard" side="bottom">
         <Link
           href="/dashboard"
@@ -200,7 +216,7 @@ export function BoardTopBar({
         ) : null}
         {isOwner ? (
           <>
-            <Button variant="secondary" size="sm" onClick={onShare} className="h-9">
+            <Button variant="secondary" size="sm" onClick={onShare} className="h-9 max-tablet:hidden">
               <Share2 className="size-4" aria-hidden />
               Share
             </Button>
@@ -208,17 +224,30 @@ export function BoardTopBar({
               <Link
                 href={`/boards/${boardId}/settings`}
                 aria-label="Board settings"
-                className="hidden size-10 items-center justify-center rounded-control hover:bg-ink/6 sm:inline-flex"
+                className="hidden size-10 items-center justify-center rounded-control hover:bg-ink/6 tablet:inline-flex xl:hidden"
               >
                 <Settings className="size-[18px]" aria-hidden />
               </Link>
             </Tooltip>
           </>
         ) : null}
-        <Button variant="secondary" size="sm" onClick={onExport} className="h-9">
+        {onComments ? (
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={onComments}
+            aria-pressed={commentsOpen}
+            className="h-9 max-tablet:hidden"
+          >
+            <MessageSquare className="size-4" aria-hidden />
+            <span className="hidden lg:inline">Comments</span>
+            <span className="sr-only lg:hidden">Comments</span>
+          </Button>
+        ) : null}
+        <Button variant="secondary" size="sm" onClick={onExport} className="h-9 max-tablet:hidden">
           <Download className="size-4" aria-hidden />
-          <span className="hidden sm:inline">Export</span>
-          <span className="sm:hidden sr-only">Export</span>
+          <span className="hidden lg:inline">Export</span>
+          <span className="sr-only lg:hidden">Export</span>
         </Button>
         {assistantAvailable ? (
           <Tooltip label="Foreman Assistant" shortcut="F" side="bottom">
@@ -228,19 +257,29 @@ export function BoardTopBar({
               onClick={onToggleAssistant}
               aria-pressed={assistantOpen}
               aria-keyshortcuts="F"
-              className="h-9"
+              className="h-9 max-tablet:hidden"
             >
               <Sparkles className="size-4" aria-hidden />
-              <span className="hidden sm:inline">Foreman Assistant</span>
-              <span className="sr-only sm:hidden">Foreman Assistant</span>
+              <span className="hidden lg:inline">Foreman Assistant</span>
+              <span className="sr-only lg:hidden">Foreman Assistant</span>
             </Button>
           </Tooltip>
         ) : null}
         <Tooltip label={panelOpen ? "Hide panel" : "Show panel"} side="bottom">
-          <IconButton label={panelOpen ? "Hide panel" : "Show panel"} aria-pressed={panelOpen} onClick={onTogglePanel}>
+          <IconButton
+            label={panelOpen ? "Hide panel" : "Show panel"}
+            aria-pressed={panelOpen}
+            onClick={onTogglePanel}
+            className="max-tablet:hidden"
+          >
             <PanelRight className="size-[18px]" aria-hidden />
           </IconButton>
         </Tooltip>
+        {more ? (
+          <div className="max-tablet:hidden">
+            <MoreMenu {...more} />
+          </div>
+        ) : null}
         <ProfileMenu profile={currentUser} />
       </div>
     </header>

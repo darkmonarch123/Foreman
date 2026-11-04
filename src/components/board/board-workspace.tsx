@@ -33,21 +33,32 @@ import {
   type Member,
 } from "@/lib/board/services";
 import { createLocalPendingStore, type PendingStore } from "@/lib/board/storage";
+import { alignObjects, restack, type AlignMode } from "@/lib/board/arrange";
 import { TOOLS, isTypingTarget, toolForKey, type Tool } from "@/lib/board/tools";
-import type { BoardState, BoardSummary, CanvasProps } from "@/lib/board/types";
+import type { BoardState, BoardSummary, CanvasObject, CanvasProps } from "@/lib/board/types";
 import { ERROR_CATALOG, errorMessage, toAppError } from "@/lib/errors";
+import { cn } from "@/lib/cn";
 import { startTimer } from "@/lib/perf/client";
 import { AssistantPanel, type AssistantIntent } from "./assistant-panel";
 import { BoardTopBar } from "./board-top-bar";
 import { CanvasStage, type RemoteCursor } from "./canvas-stage";
 import { CommandPalette, type Command } from "./command-palette";
 import { ExportDialog } from "./export-dialog";
+import { AddSheet, DesktopToolbar, EditSheet, MoreSheet, PhoneToolbar, type PhoneSheet } from "./board-toolbar";
 import { ObjectToolbar } from "./object-toolbar";
 import { ShareDialog } from "./share-dialog";
 import { ShortcutsDialog } from "./shortcuts-dialog";
 import { ActivityPanel, CommentsPanel, OutlinePanel, PeoplePanel, SidePanel, type PanelTab } from "./side-panel";
 import { ToolRail } from "./tool-rail";
 import { ZoomControls } from "./zoom-controls";
+
+/**
+ * Where the side panel and Assistant sit: a bottom sheet on phones (above the bottom toolbar,
+ * clear of the home indicator), an overlay on the right on tablets, and a column beside the
+ * board from `lg` up.
+ */
+const SHEET_CONTAINER =
+  "fixed inset-x-0 bottom-0 z-40 max-h-[88dvh] overflow-hidden rounded-t-sheet shadow-sheet animate-sheet-in tablet:absolute tablet:inset-x-auto tablet:inset-y-0 tablet:right-0 tablet:z-20 tablet:max-h-none tablet:animate-none tablet:rounded-none tablet:shadow-lift lg:static lg:shadow-none";
 
 export interface WorkspaceUser {
   id: string;
@@ -139,7 +150,16 @@ export function BoardWorkspace({
 
   // -- view state ---------------------------------------------------------------------
   const [tool, setTool] = useState<Tool>("select");
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedId, setPrimaryId] = useState<string | null>(null);
+  // Multi-select: further items selected with Shift+click (or Select all) besides the primary one.
+  const [extraIds, setExtraIds] = useState<string[]>([]);
+  const setSelectedId = useCallback((id: string | null) => {
+    setPrimaryId(id);
+    setExtraIds([]);
+  }, []);
+  // Phone only (below 744px): which bottom sheet is open. Tablet and desktop ignore it.
+  const [phoneSheet, setPhoneSheet] = useState<PhoneSheet>(null);
+  const [phonePanel, setPhonePanel] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [camera, setCamera] = useState<Camera>({ x: -120, y: -200, zoom: 1 });
   const [viewport, setViewport] = useState({ width: 0, height: 0 });
@@ -167,6 +187,15 @@ export function BoardWorkspace({
 
   const selected = selectedId ? (snapshot.byId.get(selectedId) ?? null) : null;
   const selectedVisible = selected && !selected.deleted ? selected : null;
+  const selection: CanvasObject[] = useMemo(() => {
+    if (!selectedVisible) return [];
+    const extras = extraIds
+      .map((id) => snapshot.byId.get(id))
+      .filter((object): object is CanvasObject =>
+        Boolean(object && !object.deleted && object.id !== selectedVisible.id),
+      );
+    return [selectedVisible, ...extras];
+  }, [selectedVisible, extraIds, snapshot.byId]);
   const commentTarget = commentTargetId ? (snapshot.byId.get(commentTargetId) ?? null) : null;
 
   // Fit the board once the canvas has a size.
@@ -376,7 +405,7 @@ export function BoardWorkspace({
         y: object.y + object.height / 2 - viewport.height / current.zoom / 2,
       }));
     },
-    [engine, viewport],
+    [engine, viewport, setSelectedId],
   );
 
   const duplicate = useCallback(
@@ -394,13 +423,14 @@ export function BoardWorkspace({
       });
       if (copy) setSelectedId(copy);
     },
-    [engine],
+    [engine, setSelectedId],
   );
 
   const removeObject = useCallback(
     (id: string) => {
       engine.remove(id);
-      setSelectedId((current) => (current === id ? null : current));
+      setPrimaryId((current) => (current === id ? null : current));
+      setExtraIds((current) => current.filter((extra) => extra !== id));
       setEditingId((current) => (current === id ? null : current));
     },
     [engine],
@@ -428,10 +458,70 @@ export function BoardWorkspace({
     [engine],
   );
 
+  const toggleSelect = useCallback(
+    (id: string) => {
+      if (!selectedId) {
+        setSelectedId(id);
+        return;
+      }
+      if (id === selectedId) {
+        // Removing the primary item promotes the next one.
+        setPrimaryId(extraIds[0] ?? null);
+        setExtraIds(extraIds.slice(1));
+        return;
+      }
+      setExtraIds((current) => (current.includes(id) ? current.filter((extra) => extra !== id) : [...current, id]));
+    },
+    [selectedId, extraIds, setSelectedId],
+  );
+
+  const selectAll = useCallback(() => {
+    const live = engine.getSnapshot().objects.filter((object) => !object.deleted);
+    setPrimaryId(live[0]?.id ?? null);
+    setExtraIds(live.slice(1).map((object) => object.id));
+  }, [engine]);
+
+  const styleSelection = useCallback(
+    (props: CanvasProps) => {
+      for (const object of selection) engine.update(object.id, { props });
+    },
+    [engine, selection],
+  );
+
+  const alignSelection = useCallback(
+    (mode: AlignMode) => {
+      for (const move of alignObjects(selection, mode)) engine.move(move.id, { x: move.x, y: move.y });
+      setAnnouncement(`${selection.length} items aligned`);
+    },
+    [engine, selection],
+  );
+
+  const restackSelected = useCallback(
+    (direction: "forward" | "backward") => {
+      if (!selectedVisible) return;
+      const live = engine.getSnapshot().objects.filter((object) => !object.deleted);
+      for (const change of restack(live, selectedVisible.id, direction)) {
+        engine.update(change.id, { z_index: change.z_index });
+      }
+    },
+    [engine, selectedVisible],
+  );
+
+  const duplicateSelection = useCallback(() => {
+    for (const object of selection) duplicate(object.id);
+  }, [selection, duplicate]);
+
+  const deleteSelection = useCallback(() => {
+    for (const object of selection) removeObject(object.id);
+    setSelectedId(null);
+  }, [selection, removeObject, setSelectedId]);
+
   const openComments = useCallback((targetId: string | null) => {
     setCommentTargetId(targetId);
     setPanelTab("comments");
     setPanelOpen(true);
+    setPhonePanel(true);
+    setPhoneSheet(null);
     requestAnimationFrame(() => document.getElementById("new-comment")?.focus());
   }, []);
 
@@ -439,6 +529,7 @@ export function BoardWorkspace({
     (request?: { action: AssistantAction; context: "board" | "object" }) => {
       if (!assistant) return;
       setAssistantOpen(true);
+      setPhoneSheet(null);
       if (request) setAssistantIntent({ nonce: Date.now() + Math.random(), ...request });
     },
     [assistant],
@@ -505,6 +596,9 @@ export function BoardWorkspace({
         } else if (lower === "y") {
           event.preventDefault();
           engine.redo();
+        } else if (lower === "a" && !onControl) {
+          event.preventDefault();
+          selectAll();
         } else if (lower === "d" && selectedId) {
           event.preventDefault();
           duplicate(selectedId);
@@ -530,7 +624,7 @@ export function BoardWorkspace({
         else setSelectedId(null);
       } else if ((key === "Delete" || key === "Backspace") && selectedId && canEdit) {
         event.preventDefault();
-        removeObject(selectedId);
+        deleteSelection();
       } else if (key === "Enter" && selectedVisible && canEdit && !onControl && supportsText(selectedVisible.type)) {
         event.preventDefault();
         setEditingId(selectedVisible.id);
@@ -562,7 +656,9 @@ export function BoardWorkspace({
     canEdit,
     tool,
     duplicate,
-    removeObject,
+    deleteSelection,
+    selectAll,
+    setSelectedId,
     nudge,
     zoomTo,
     zoomToFit,
@@ -641,6 +737,24 @@ export function BoardWorkspace({
         ? [
             { id: "duplicate", label: "Duplicate", onSelect: () => duplicate(target.id) },
             { id: "front", label: "Bring to front", onSelect: () => bringToFront(target.id) },
+            {
+              id: "forward",
+              label: "Bring forward",
+              onSelect: () => {
+                const live = engine.getSnapshot().objects.filter((object) => !object.deleted);
+                for (const change of restack(live, target.id, "forward"))
+                  engine.update(change.id, { z_index: change.z_index });
+              },
+            },
+            {
+              id: "backward",
+              label: "Send backward",
+              onSelect: () => {
+                const live = engine.getSnapshot().objects.filter((object) => !object.deleted);
+                for (const change of restack(live, target.id, "backward"))
+                  engine.update(change.id, { z_index: change.z_index });
+              },
+            },
           ]
         : []),
       ...(canComment
@@ -661,6 +775,8 @@ export function BoardWorkspace({
         : []),
     ];
   }, [
+    engine,
+    setSelectedId,
     contextMenu,
     snapshot.byId,
     canEdit,
@@ -762,6 +878,25 @@ export function BoardWorkspace({
     ],
   );
 
+  const selectionActions = {
+    selection,
+    canEdit,
+    onStyle: styleSelection,
+    onForward: () => restackSelected("forward"),
+    onBackward: () => restackSelected("backward"),
+    onDuplicate: duplicateSelection,
+    onDelete: deleteSelection,
+    onAlign: alignSelection,
+  };
+  const moreActions = {
+    isOwner: role === "OWNER",
+    boardId,
+    onExport: () => setDialog("export"),
+    onShare: () => setDialog("share"),
+    onShortcuts: () => setDialog("shortcuts"),
+    onFit: zoomToFit,
+  };
+
   // -- access lost ----------------------------------------------------------------------------------
   if (accessLost) {
     return (
@@ -782,7 +917,7 @@ export function BoardWorkspace({
   }
 
   return (
-    <div className="flex h-dvh flex-col overflow-hidden">
+    <div className="relative flex h-dvh flex-col overflow-hidden">
       <BoardTopBar
         boardId={boardId}
         title={board.title}
@@ -805,7 +940,23 @@ export function BoardWorkspace({
         assistantAvailable={Boolean(assistant)}
         assistantOpen={assistantOpen}
         onToggleAssistant={() => (assistantOpen ? closeAssistant() : openAssistant())}
+        onComments={() => openComments(null)}
+        commentsOpen={panelOpen && panelTab === "comments" && !assistantOpen}
+        more={moreActions}
         currentUser={currentUser}
+      />
+
+      <DesktopToolbar
+        tool={tool}
+        onToolChange={changeTool}
+        {...selectionActions}
+        zoom={camera.zoom}
+        onZoomIn={() => zoomTo(1.2)}
+        onZoomOut={() => zoomTo(1 / 1.2)}
+        onZoomReset={() =>
+          setCamera((current) => zoomAt(current, { x: viewport.width / 2, y: viewport.height / 2 }, 1))
+        }
+        onFit={zoomToFit}
       />
 
       <div className="relative flex min-h-0 flex-1">
@@ -817,6 +968,8 @@ export function BoardWorkspace({
             onToolChange={changeTool}
             selectedId={selectedVisible?.id ?? null}
             onSelect={setSelectedId}
+            extraSelectedIds={selection.slice(1).map((object) => object.id)}
+            onToggleSelect={toggleSelect}
             camera={camera}
             onCameraChange={setCamera}
             onViewportChange={setViewport}
@@ -889,7 +1042,7 @@ export function BoardWorkspace({
           ) : null}
 
           {selectedVisible && canEdit && !editingId && snapshot.status !== "failed" ? (
-            <div className="pointer-events-none absolute inset-x-3 top-3 z-10 flex justify-center">
+            <div className="pointer-events-none absolute inset-x-3 top-3 z-10 hidden justify-center tablet:flex xl:hidden">
               <div className="pointer-events-auto">
                 <ObjectToolbar
                   object={selectedVisible}
@@ -920,7 +1073,7 @@ export function BoardWorkspace({
             </div>
           ) : null}
 
-          <div className="absolute left-3 top-1/2 z-10 -translate-y-1/2">
+          <div className="absolute left-3 top-1/2 z-10 hidden -translate-y-1/2 tablet:block xl:hidden">
             <ToolRail
               tool={tool}
               onToolChange={changeTool}
@@ -929,7 +1082,7 @@ export function BoardWorkspace({
             />
           </div>
 
-          <div className="absolute bottom-3 left-3 z-10">
+          <div className="absolute bottom-3 left-3 z-10 max-tablet:top-[calc(max(0.5rem,env(safe-area-inset-top))+4rem)] max-tablet:bottom-auto">
             <ZoomControls
               zoom={camera.zoom}
               onZoomIn={() => zoomTo(1.2)}
@@ -946,13 +1099,54 @@ export function BoardWorkspace({
 
           {selectedVisible ? (
             <p className="sr-only" aria-live="polite">
-              Selected: {TYPE_LABELS[selectedVisible.type]}
+              {selection.length > 1
+                ? `${selection.length} items selected`
+                : `Selected: ${TYPE_LABELS[selectedVisible.type]}`}
             </p>
           ) : null}
+
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 tablet:hidden">
+            <PhoneToolbar
+              tool={tool}
+              canEdit={canEdit}
+              hasSelection={selection.length > 0}
+              assistantAvailable={Boolean(assistant)}
+              active={
+                phoneSheet ??
+                (assistantOpen ? "assistant" : phonePanel ? (panelTab === "outline" ? "outline" : "comments") : null)
+              }
+              onAdd={() => setPhoneSheet("add")}
+              onSelectEdit={() => {
+                changeTool("select");
+                if (selection.length > 0 && canEdit) setPhoneSheet("edit");
+              }}
+              onComments={() => openComments(null)}
+              onOutline={() => {
+                setPanelTab("outline");
+                setPanelOpen(true);
+                setPhonePanel(true);
+                setPhoneSheet(null);
+              }}
+              onAssistant={() => (assistantOpen ? closeAssistant() : openAssistant())}
+              onMore={() => setPhoneSheet("more")}
+            />
+          </div>
         </main>
 
+        {/* Phone: the panel or Assistant is a bottom sheet over the board, with a scrim. */}
+        {(assistant && assistantOpen) || phonePanel ? (
+          <div
+            aria-hidden
+            className="fixed inset-0 z-30 bg-scrim tablet:hidden"
+            onClick={() => {
+              if (assistantOpen) closeAssistant();
+              setPhonePanel(false);
+            }}
+          />
+        ) : null}
+
         {assistant && assistantOpen ? (
-          <div className="absolute inset-y-0 right-0 z-20 shadow-lift md:static md:shadow-none">
+          <div className={SHEET_CONTAINER}>
             <AssistantPanel
               services={assistant}
               boardId={boardId}
@@ -972,12 +1166,15 @@ export function BoardWorkspace({
               onAnnounce={setAnnouncement}
             />
           </div>
-        ) : panelOpen ? (
-          <div className="absolute inset-y-0 right-0 z-20 shadow-lift md:static md:shadow-none">
+        ) : panelOpen || phonePanel ? (
+          <div className={cn(SHEET_CONTAINER, !phonePanel && "max-tablet:hidden", !panelOpen && "tablet:hidden")}>
             <SidePanel
               tab={panelTab}
               onTabChange={setPanelTab}
-              onClose={() => setPanelOpen(false)}
+              onClose={() => {
+                setPanelOpen(false);
+                setPhonePanel(false);
+              }}
               commentCount={comments.items?.length ?? 0}
             >
               {panelTab === "people" ? (
@@ -1128,6 +1325,13 @@ export function BoardWorkspace({
       />
       <ShortcutsDialog open={dialog === "shortcuts"} onClose={() => setDialog(null)} />
       <CommandPalette open={dialog === "palette"} onClose={() => setDialog(null)} commands={commands} />
+      <AddSheet open={phoneSheet === "add"} onClose={() => setPhoneSheet(null)} tool={tool} onToolChange={changeTool} />
+      <EditSheet
+        open={phoneSheet === "edit" && selection.length > 0}
+        onClose={() => setPhoneSheet(null)}
+        {...selectionActions}
+      />
+      <MoreSheet open={phoneSheet === "more"} onClose={() => setPhoneSheet(null)} {...moreActions} />
     </div>
   );
 }

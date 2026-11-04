@@ -34,7 +34,7 @@ export function ZoomControls({
       <div
         role="group"
         aria-label="Zoom"
-        className="flex items-center rounded-card border border-line bg-surface p-1 shadow-soft"
+        className="flex items-center rounded-card border border-line bg-surface p-1 shadow-soft max-tablet:hidden xl:hidden"
       >
         <Tooltip label="Zoom out">
           <IconButton label="Zoom out" size="sm" onClick={onZoomOut} disabled={zoom <= MIN_ZOOM}>
@@ -80,7 +80,7 @@ export function ZoomControls({
         <IconButton
           label="Keyboard shortcuts"
           onClick={onShowShortcuts}
-          className="rounded-card border border-line bg-surface shadow-soft"
+          className="rounded-card border border-line bg-surface shadow-soft max-tablet:hidden xl:hidden"
         >
           <Keyboard className="size-4" aria-hidden />
         </IconButton>

@@ -51,6 +51,10 @@ interface CanvasStageProps {
   onToolChange: (tool: Tool) => void;
   selectedId: string | null;
   onSelect: (id: string | null) => void;
+  /** Other selected objects besides selectedId (multi-select). Outlined, not resizable. */
+  extraSelectedIds?: readonly string[];
+  /** Shift+click: add an object to, or remove it from, the selection. */
+  onToggleSelect?: (id: string) => void;
   camera: Camera;
   onCameraChange: (camera: Camera) => void;
   onViewportChange: (size: { width: number; height: number }) => void;
@@ -78,11 +82,14 @@ type Interaction =
   | { kind: "shape"; type: "RECTANGLE" | "CIRCLE" | "ARROW"; start: Point }
   | { kind: "place"; type: "STICKY_NOTE" | "TEXT" }
   | { kind: "pen"; points: Point[] }
-  | { kind: "erase" };
+  | { kind: "erase" }
+  | { kind: "pinch"; startDistance: number; startMid: Point; startCamera: Camera };
 
 type Preview = Partial<Pick<CanvasObject, "x" | "y" | "width" | "height">> & { id: string };
 
 const CLICK_SLOP = 5;
+/** How long a finger must rest on the canvas to open the item menu (the touch right-click). */
+export const LONG_PRESS_MS = 500;
 
 function objectIdAt(target: EventTarget | null): string | null {
   if (!(target instanceof Element)) return null;
@@ -96,6 +103,8 @@ export function CanvasStage({
   onToolChange,
   selectedId,
   onSelect,
+  extraSelectedIds = [],
+  onToggleSelect,
   camera,
   onCameraChange,
   onViewportChange,
@@ -116,6 +125,14 @@ export function CanvasStage({
   const interaction = useRef<Interaction | null>(null);
   const cameraRef = useRef(camera);
   const [preview, setPreview] = useState<Preview | null>(null);
+  // Touch support: every active pointer (for two-finger pinch) and the pending long press.
+  const pointers = useRef(new Map<number, Point>());
+  const longPress = useRef<{ timer: ReturnType<typeof setTimeout>; start: Point } | null>(null);
+  const cancelLongPress = useCallback(() => {
+    if (longPress.current) clearTimeout(longPress.current.timer);
+    longPress.current = null;
+  }, []);
+  useEffect(() => cancelLongPress, [cancelLongPress]);
   const [draft, setDraft] = useState<
     { kind: "pen"; points: Point[] } | { kind: "shape"; type: string; from: Point; to: Point } | null
   >(null);
@@ -217,6 +234,42 @@ export function CanvasStage({
       element.setPointerCapture(event.pointerId);
     };
 
+    pointers.current.set(event.pointerId, screen);
+    if (event.pointerType === "touch" && pointers.current.size === 2) {
+      // A second finger: pinch to zoom (and pan with the midpoint). Whatever the first finger
+      // started is abandoned without being applied.
+      cancelLongPress();
+      setPreview(null);
+      setDraft(null);
+      const [a, b] = [...pointers.current.values()];
+      begin({
+        kind: "pinch",
+        startDistance: Math.max(1, Math.hypot(a.x - b.x, a.y - b.y)),
+        startMid: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 },
+        startCamera: cameraRef.current,
+      });
+      return;
+    }
+    if (pointers.current.size > 2) return;
+
+    if (event.pointerType !== "mouse" && tool === "select") {
+      // Long press opens the same menu as right-click.
+      cancelLongPress();
+      const at = { x: event.clientX, y: event.clientY };
+      longPress.current = {
+        start: screen,
+        timer: setTimeout(() => {
+          longPress.current = null;
+          interaction.current = null;
+          setPreview(null);
+          setPanning(false);
+          if (element.hasPointerCapture(event.pointerId)) element.releasePointerCapture(event.pointerId);
+          if (hitId) onSelect(hitId);
+          onContextMenu(hitId, at);
+        }, LONG_PRESS_MS),
+      };
+    }
+
     if (event.button === 1 || tool === "hand" || spaceHeld) {
       event.preventDefault();
       setPanning(true);
@@ -226,6 +279,10 @@ export function CanvasStage({
     if (event.button !== 0) return;
 
     if (tool === "select") {
+      if (hitId && event.shiftKey && onToggleSelect) {
+        onToggleSelect(hitId);
+        return;
+      }
       if (hitId) {
         onSelect(hitId);
         const target = objects.find((object) => object.id === hitId);
@@ -275,10 +332,31 @@ export function CanvasStage({
   function onPointerMove(event: ReactPointerEvent<HTMLDivElement>) {
     const world = toWorld(event);
     onPointerWorld(world);
+    const screenPoint = toScreen(event);
+    if (pointers.current.has(event.pointerId)) pointers.current.set(event.pointerId, screenPoint);
+    if (
+      longPress.current &&
+      Math.hypot(screenPoint.x - longPress.current.start.x, screenPoint.y - longPress.current.start.y) > CLICK_SLOP * 2
+    ) {
+      cancelLongPress();
+    }
     const current = interaction.current;
     if (!current) return;
 
     switch (current.kind) {
+      case "pinch": {
+        const [a, b] = [...pointers.current.values()];
+        if (!a || !b) break;
+        const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+        const scale = Math.hypot(a.x - b.x, a.y - b.y) / current.startDistance;
+        const zoomed = zoomAt(current.startCamera, current.startMid, current.startCamera.zoom * scale);
+        onCameraChange({
+          ...zoomed,
+          x: zoomed.x - (mid.x - current.startMid.x) / zoomed.zoom,
+          y: zoomed.y - (mid.y - current.startMid.y) / zoomed.zoom,
+        });
+        break;
+      }
       case "pan": {
         const screen = toScreen(event);
         const { startCamera, startScreen } = current;
@@ -339,7 +417,17 @@ export function CanvasStage({
   }
 
   function onPointerUp(event: ReactPointerEvent<HTMLDivElement>) {
+    pointers.current.delete(event.pointerId);
+    cancelLongPress();
     const current = interaction.current;
+    if (current?.kind === "pinch") {
+      // Lifting one finger ends the pinch; the other finger does nothing until lifted too.
+      interaction.current = null;
+      if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+        event.currentTarget.releasePointerCapture(event.pointerId);
+      }
+      return;
+    }
     interaction.current = null;
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId);
@@ -628,6 +716,26 @@ export function CanvasStage({
           </div>
         )
       ) : null}
+
+      {extraSelectedIds.map((id) => {
+        const object = objects.find((candidate) => candidate.id === id && !candidate.deleted);
+        if (!object) return null;
+        const bounds = objectBounds(withPreview(object));
+        const topLeft = worldToScreen(camera, { x: bounds.x, y: bounds.y });
+        return (
+          <div
+            key={id}
+            data-testid="selection-extra"
+            className="pointer-events-none absolute rounded-[3px] border-[1.5px] border-dashed border-focus"
+            style={{
+              left: topLeft.x - 3,
+              top: topLeft.y - 3,
+              width: bounds.width * camera.zoom + 6,
+              height: bounds.height * camera.zoom + 6,
+            }}
+          />
+        );
+      })}
 
       {editing ? (
         <TextEditor

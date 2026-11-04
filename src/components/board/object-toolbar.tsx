@@ -28,7 +28,7 @@ interface ObjectToolbarProps {
   onAskForeman?: () => void;
 }
 
-function Swatches({
+export function Swatches({
   label,
   colors,
   value,

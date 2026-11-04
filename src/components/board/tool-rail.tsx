@@ -20,7 +20,7 @@ import { Tooltip } from "@/components/ui/tooltip";
 import { TOOLS, type Tool } from "@/lib/board/tools";
 import { cn } from "@/lib/cn";
 
-const ICONS: Record<Tool, LucideIcon> = {
+export const TOOL_ICONS: Record<Tool, LucideIcon> = {
   select: MousePointer2,
   hand: Hand,
   pen: Pencil,
@@ -53,7 +53,7 @@ export function ToolRail({ tool, onToolChange, canEdit, onShowShortcuts }: ToolR
       className="flex flex-col items-center gap-1 rounded-card border border-line bg-surface p-1.5 shadow-soft"
     >
       {TOOLS.map((definition, index) => {
-        const Icon = ICONS[definition.id];
+        const Icon = TOOL_ICONS[definition.id];
         const disabled = definition.requiresEdit && !canEdit;
         const active = tool === definition.id;
         return (

@@ -87,7 +87,7 @@ export function IconButton({
       className={cn(
         "inline-flex shrink-0 items-center justify-center rounded-control text-ink transition-colors duration-150",
         "hover:bg-ink/6 disabled:opacity-40",
-        size === "sm" ? "size-8" : "size-10",
+        size === "sm" ? "size-8 pointer-coarse:size-11" : "size-10 pointer-coarse:size-11",
         active && "bg-accent text-on-accent hover:bg-accent",
         className,
       )}

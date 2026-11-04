@@ -25,6 +25,8 @@ interface ModalProps {
   size?: "sm" | "md" | "lg" | "xl";
   /** Set false for destructive confirmations so a stray click cannot dismiss them. */
   dismissOnBackdrop?: boolean;
+  /** "sheet" always rises from the bottom edge (phone and tablet menus); "dialog" centres from `sm` up. */
+  variant?: "dialog" | "sheet";
 }
 
 const widths = { sm: "max-w-md", md: "max-w-lg", lg: "max-w-2xl", xl: "max-w-4xl" };
@@ -45,7 +47,9 @@ export function Modal({
   footer,
   size = "md",
   dismissOnBackdrop = true,
+  variant = "dialog",
 }: ModalProps) {
+  const sheet = variant === "sheet";
   const titleId = useId();
   const descriptionId = useId();
   const panelRef = useRef<HTMLDivElement>(null);
@@ -106,8 +110,8 @@ export function Modal({
   if (!open || typeof document === "undefined") return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-end justify-center p-0 sm:items-center sm:p-6">
-      <div aria-hidden className="absolute inset-0 bg-ink/35" onMouseDown={dismissOnBackdrop ? onClose : undefined} />
+    <div className={cn("fixed inset-0 z-50 flex items-end justify-center p-0", !sheet && "sm:items-center sm:p-6")}>
+      <div aria-hidden className="absolute inset-0 bg-scrim" onMouseDown={dismissOnBackdrop ? onClose : undefined} />
       <div
         ref={panelRef}
         role="dialog"
@@ -116,11 +120,13 @@ export function Modal({
         aria-describedby={description ? descriptionId : undefined}
         tabIndex={-1}
         className={cn(
-          "relative flex max-h-[92dvh] w-full animate-pop-in flex-col rounded-t-panel bg-surface shadow-lift outline-none sm:rounded-card",
+          "relative flex max-h-[92dvh] w-full flex-col rounded-t-sheet bg-elevated pb-[env(safe-area-inset-bottom)] shadow-sheet outline-none",
+          sheet ? "animate-sheet-in" : "animate-pop-in sm:rounded-card sm:pb-0 sm:shadow-lift",
           widths[size],
         )}
       >
-        <div className="flex items-start justify-between gap-4 px-6 pt-6">
+        {sheet ? <span aria-hidden className="mx-auto mt-2.5 h-1 w-10 shrink-0 rounded-full bg-line-strong" /> : null}
+        <div className={cn("flex items-start justify-between gap-4 px-6", sheet ? "pt-3" : "pt-6")}>
           <div className="min-w-0">
             <h2 id={titleId} className="font-display text-2xl tracking-tight">
               {title}

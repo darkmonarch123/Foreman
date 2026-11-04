@@ -633,7 +633,7 @@ export function SidePanel({ tab, onTabChange, onClose, commentCount, children }:
   return (
     <aside
       aria-label="Collaboration panel"
-      className="flex h-full w-[22rem] max-w-[92vw] shrink-0 flex-col border-l border-line bg-warm"
+      className="flex h-[min(88dvh,40rem)] w-full shrink-0 flex-col bg-canvas pb-[env(safe-area-inset-bottom)] tablet:h-full tablet:w-[22rem] tablet:max-w-[92vw] tablet:border-l tablet:border-line tablet:pb-0"
     >
       <div className="flex items-center justify-between px-4 pt-3">
         <h2 className="text-sm font-medium">Board panel</h2>
