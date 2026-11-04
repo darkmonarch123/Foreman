@@ -5,7 +5,7 @@ import type { BoardRole } from "@/lib/board/types";
 import { Spinner } from "./spinner";
 
 const roleStyles: Record<BoardRole, string> = {
-  OWNER: "bg-ink text-white border-ink",
+  OWNER: "bg-ink text-canvas border-ink",
   EDITOR: "bg-lavender-tint text-ink border-lavender",
   VIEWER: "bg-surface text-muted border-line-strong",
 };

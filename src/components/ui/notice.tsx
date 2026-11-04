@@ -6,16 +6,16 @@ type Tone = "error" | "success" | "info" | "warning";
 
 const tones: Record<Tone, { className: string; icon: ReactNode }> = {
   error: {
-    className: "border-error/30 bg-coral-tint text-[#7d241b]",
+    className: "border-danger/30 bg-danger-soft text-danger",
     icon: <CircleAlert className="size-4" aria-hidden />,
   },
   success: {
-    className: "border-success/30 bg-mint-tint text-[#17563a]",
+    className: "border-success/30 bg-success-soft text-success",
     icon: <CircleCheck className="size-4" aria-hidden />,
   },
   info: { className: "border-line bg-sky-tint text-ink", icon: <Info className="size-4" aria-hidden /> },
   warning: {
-    className: "border-warning/30 bg-yellow-tint text-[#6b470f]",
+    className: "border-warning/30 bg-warning-soft text-warning",
     icon: <CircleAlert className="size-4" aria-hidden />,
   },
 };

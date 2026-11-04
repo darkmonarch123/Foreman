@@ -51,7 +51,7 @@ function HeroBoard() {
       <div className="canvas-grid [background-size:22px_22px]">
         <svg
           viewBox={`${bounds.x} ${bounds.y} ${bounds.width} ${bounds.height}`}
-          className="block w-full"
+          className="board-ink block w-full"
           role="img"
           aria-label="A Foreman board with Plan, Build and Test columns. A sticky note is being moved from Plan into Build."
         >
@@ -138,7 +138,7 @@ function Story({ id, title, body, points, visual, visualLabel, tone, flip }: Sto
           <ul className="mt-7 flex flex-col gap-3">
             {points.map((point) => (
               <li key={point} className="flex items-start gap-3 text-[15px] leading-snug">
-                <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-ink text-white">
+                <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-ink text-canvas">
                   <Check className="size-3" aria-hidden />
                 </span>
                 {point}
@@ -388,7 +388,7 @@ export default function LandingPage() {
 
         {/* Final CTA */}
         <section id="about" className="scroll-mt-28 px-3 sm:px-6">
-          <div className="mx-auto max-w-6xl rounded-panel bg-black px-6 py-16 text-white sm:px-16 sm:py-24">
+          <div className="mx-auto max-w-6xl rounded-panel border border-white/5 bg-black px-6 py-16 text-white sm:px-16 sm:py-24">
             <h2 className="font-display max-w-3xl text-headline">Plan visually. Build together.</h2>
             <p className="mt-5 max-w-xl text-[17px] leading-relaxed text-white/70">
               Open a board, add a note, and invite the people you are building with. It takes about a minute.

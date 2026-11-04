@@ -75,7 +75,7 @@ export function ToolRail({ tool, onToolChange, canEdit, onShowShortcuts }: ToolR
                 }}
                 className={cn(
                   "inline-flex size-10 items-center justify-center rounded-control transition-colors duration-150",
-                  active ? "bg-ink text-white" : "text-ink hover:bg-ink/6",
+                  active ? "bg-accent text-on-accent" : "text-ink hover:bg-ink/6",
                   disabled && "opacity-35 hover:bg-transparent",
                 )}
               >

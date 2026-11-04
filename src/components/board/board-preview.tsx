@@ -33,7 +33,7 @@ export function BoardPreview({ objects, label, simplified = false, padding = 40,
     <svg
       viewBox={`${bounds.x} ${bounds.y} ${bounds.width} ${bounds.height}`}
       preserveAspectRatio="xMidYMid meet"
-      className={cn("block size-full", className)}
+      className={cn("board-ink block size-full", className)}
       role={label ? "img" : undefined}
       aria-label={label}
       aria-hidden={label ? undefined : true}

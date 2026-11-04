@@ -17,7 +17,7 @@ import type { Profile } from "./types";
  */
 
 const PROFILE_COLUMNS =
-  "id, first_name, last_name, username, email, email_verified, avatar_url, avatar_seed, avatar_style, avatar_gender_selection, plan, status, notification_prefs, created_at";
+  "id, first_name, last_name, username, email, email_verified, avatar_url, avatar_seed, avatar_style, avatar_gender_selection, plan, status, notification_prefs, theme_preference, created_at";
 
 /** The signed-in user's profile, or null. Deduplicated per request. */
 export const getCurrentProfile = cache(async (): Promise<Profile | null> => {

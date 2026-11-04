@@ -38,14 +38,14 @@ export function Tooltip({ label, shortcut, side = "top", children }: TooltipProp
         id={id}
         role="tooltip"
         className={cn(
-          "pointer-events-none absolute z-40 flex items-center gap-2 whitespace-nowrap rounded-lg bg-ink px-2.5 py-1.5 text-xs text-white shadow-soft transition-opacity duration-100",
+          "pointer-events-none absolute z-40 flex items-center gap-2 whitespace-nowrap rounded-lg bg-ink px-2.5 py-1.5 text-xs text-canvas shadow-soft transition-opacity duration-100",
           sides[side],
           open ? "opacity-100" : "opacity-0",
         )}
         hidden={!open}
       >
         {label}
-        {shortcut ? <kbd className="rounded bg-white/15 px-1 font-sans text-[11px]">{shortcut}</kbd> : null}
+        {shortcut ? <kbd className="rounded bg-canvas/15 px-1 font-sans text-[11px]">{shortcut}</kbd> : null}
       </span>
     </span>
   );

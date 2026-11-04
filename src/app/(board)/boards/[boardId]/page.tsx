@@ -52,6 +52,8 @@ async function BoardLoader({ params, searchParams }: { params: Params; searchPar
         last_name: profile.last_name,
         username: profile.username,
         avatar_url: profile.avatar_url,
+        email: profile.email,
+        theme_preference: profile.theme_preference,
       }}
     />
   );

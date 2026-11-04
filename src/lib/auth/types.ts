@@ -14,5 +14,6 @@ export interface Profile {
   plan: PlanId;
   status: "ACTIVE" | "PENDING_DELETION" | "DELETED";
   notification_prefs: Record<string, boolean>;
+  theme_preference: "system" | "light" | "dark";
   created_at: string;
 }

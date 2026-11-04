@@ -201,7 +201,7 @@ test("owner and collaborator work on one board in real time", async ({ browser }
 
   // -- Log out: protected routes reject -------------------------------------------------
   await owner.getByRole("button", { name: /Account menu/ }).click();
-  await owner.getByRole("menuitem", { name: "Log out" }).click();
+  await owner.getByRole("menuitem", { name: "Sign out", exact: true }).click();
   await expect(owner).toHaveURL(/\/login/);
   await owner.goto(boardUrl);
   await expect(owner).toHaveURL(/\/login/);

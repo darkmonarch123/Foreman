@@ -4,7 +4,9 @@ import "./harness.css";
 import { StrictMode, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { BoardWorkspace, type WorkspaceUser } from "@/components/board/board-workspace";
+import { ThemeController } from "@/components/theme/theme-controller";
 import { ToastProvider } from "@/components/ui/toast";
+import { THEME_INIT_SCRIPT } from "@/lib/theme";
 import type { BoardServices, Member } from "@/lib/board/services";
 import type { BoardState } from "@/lib/board/types";
 import { createHttpBoardServices } from "./http-services";
@@ -15,6 +17,9 @@ import { createHttpBoardServices } from "./http-services";
  *
  *   /?backend=http://127.0.0.1:PORT&user=ada|ben|vic
  */
+// Same pre-paint theme step as the root layout.
+new Function(THEME_INIT_SCRIPT)();
+
 const params = new URLSearchParams(window.location.search);
 const backend = params.get("backend") ?? "";
 const userKey = params.get("user") ?? "ada";
@@ -71,6 +76,7 @@ function Harness() {
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <ToastProvider>
+      <ThemeController />
       <Harness />
     </ToastProvider>
   </StrictMode>,

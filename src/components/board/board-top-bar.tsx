@@ -138,7 +138,7 @@ export function BoardTopBar({
               <p
                 id="board-title-error"
                 role="alert"
-                className="absolute left-0 top-11 z-10 rounded-lg bg-error px-2.5 py-1.5 text-xs text-white shadow-soft"
+                className="absolute left-0 top-11 z-10 rounded-lg bg-danger px-2.5 py-1.5 text-xs text-on-danger shadow-soft"
               >
                 {error}
               </p>

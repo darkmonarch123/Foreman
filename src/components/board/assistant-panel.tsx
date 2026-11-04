@@ -53,8 +53,8 @@ type Phase = "loading" | "idle" | "running";
 
 const LABEL_TEXT = { fact: "Fact", inference: "Inference", suggestion: "Suggestion" } as const;
 const LABEL_STYLE = {
-  fact: "bg-mint-tint text-[#17563a]",
-  inference: "bg-yellow-tint text-[#6b470f]",
+  fact: "bg-success-soft text-success",
+  inference: "bg-warning-soft text-warning",
   suggestion: "bg-sky-tint text-ink",
 } as const;
 
@@ -658,7 +658,7 @@ function ProposalCard({
       {draft ? (
         isApplied ? (
           <div className="mt-3 flex flex-wrap items-center gap-2">
-            <span className="inline-flex items-center gap-1.5 text-sm text-[#17563a]">
+            <span className="inline-flex items-center gap-1.5 text-sm text-success">
               <Check className="size-4" aria-hidden />
               {undone ? "Undone" : "Added to the board"}
             </span>

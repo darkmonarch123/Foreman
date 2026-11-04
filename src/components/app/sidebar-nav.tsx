@@ -54,7 +54,7 @@ export function SidebarNav({ orientation = "vertical" }: { orientation?: "vertic
               aria-current={active ? "page" : undefined}
               className={cn(
                 "flex items-center gap-3 rounded-control px-3 py-2.5 text-sm transition-colors",
-                active ? "bg-ink text-white" : "text-ink/75 hover:bg-ink/6 hover:text-ink",
+                active ? "bg-accent-soft font-medium text-accent-ink" : "text-ink/75 hover:bg-ink/6 hover:text-ink",
               )}
             >
               <Icon className="size-4 shrink-0" aria-hidden />

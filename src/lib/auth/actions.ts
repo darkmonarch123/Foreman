@@ -362,3 +362,18 @@ export async function recordCookieConsentAction(input: unknown): Promise<ActionR
   if (error) return actionFailure(error);
   return actionSuccess();
 }
+
+/** Saves the Light / Dark / System choice on the account, so it follows the person to other devices. */
+export async function setThemePreferenceAction(input: unknown): Promise<ActionResult<{ theme: string }>> {
+  if (!getPublicEnv()) return notConfigured();
+  const profile = await getCurrentProfile();
+  if (!profile) return actionFailure(new AppError("UNAUTHENTICATED"));
+  const theme = (input as { theme?: unknown } | null)?.theme;
+  if (theme !== "system" && theme !== "light" && theme !== "dark") {
+    return actionFailure(new AppError("VALIDATION_FAILED"));
+  }
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("set_theme_preference", { p_theme: theme });
+  if (error) return actionFailure(toAppError(error));
+  return actionSuccess({ theme: data as string });
+}

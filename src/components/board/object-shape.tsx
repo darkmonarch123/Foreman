@@ -4,6 +4,9 @@ import type { CanvasObject } from "@/lib/board/types";
 
 type ShapeObject = Pick<CanvasObject, "type" | "x" | "y" | "width" | "height" | "props">;
 
+/** The default ink every new object starts with (src/lib/board/defaults.ts). */
+export const DEFAULT_INK = "#121212";
+
 interface TextBlockProps {
   object: ShapeObject;
   centered: boolean;
@@ -42,7 +45,7 @@ function TextBlock({ object, centered, padding = TEXT_PADDING, clip = true }: Te
           fontSize,
           fontWeight: props.bold ? 600 : 400,
           lineHeight: LINE_HEIGHT,
-          color: props.color ?? "#121212",
+          color: props.color ?? DEFAULT_INK,
           textAlign: align,
           whiteSpace: "pre-wrap",
           overflowWrap: "anywhere",
@@ -113,7 +116,7 @@ export function ObjectShape({ object, simplified = false, hideText = false }: Ob
             height={height}
             rx={10}
             fill={props.fill ?? "#FFFFFF"}
-            stroke={props.stroke ?? "#121212"}
+            stroke={props.stroke ?? DEFAULT_INK}
             strokeWidth={props.strokeWidth ?? 2}
           />
           {showText ? <TextBlock object={object} centered /> : null}
@@ -128,7 +131,7 @@ export function ObjectShape({ object, simplified = false, hideText = false }: Ob
             rx={Math.abs(width / 2)}
             ry={Math.abs(height / 2)}
             fill={props.fill ?? "#FFFFFF"}
-            stroke={props.stroke ?? "#121212"}
+            stroke={props.stroke ?? DEFAULT_INK}
             strokeWidth={props.strokeWidth ?? 2}
           />
           {showText ? <TextBlock object={object} centered /> : null}
@@ -138,7 +141,7 @@ export function ObjectShape({ object, simplified = false, hideText = false }: Ob
       const from = { x, y };
       const to = { x: x + width, y: y + height };
       const strokeWidth = props.strokeWidth ?? 2;
-      const stroke = props.stroke ?? "#121212";
+      const stroke = props.stroke ?? DEFAULT_INK;
       const [tip, left, right] = arrowHead(from, to, 8 + strokeWidth * 2);
       return (
         <g>
@@ -181,7 +184,7 @@ export function ObjectShape({ object, simplified = false, hideText = false }: Ob
           <path
             d={path}
             fill="none"
-            stroke={props.stroke ?? "#121212"}
+            stroke={props.stroke ?? DEFAULT_INK}
             strokeWidth={strokeWidth}
             strokeLinecap="round"
             strokeLinejoin="round"

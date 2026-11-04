@@ -34,7 +34,7 @@ import {
 import { TOOL_OBJECT_TYPE, isTypingTarget, type Tool } from "@/lib/board/tools";
 import type { CanvasObject, CreatePayload, UpdatePayload } from "@/lib/board/types";
 import { cn } from "@/lib/cn";
-import { ObjectShape } from "./object-shape";
+import { DEFAULT_INK, ObjectShape } from "./object-shape";
 
 export interface RemoteCursor {
   userId: string;
@@ -515,7 +515,7 @@ export function CanvasStage({
       }}
     >
       <svg
-        className="absolute inset-0 size-full"
+        className="board-ink absolute inset-0 size-full"
         role="group"
         aria-label="Board canvas. The Outline panel lists every item for keyboard and screen-reader use."
       >
@@ -543,7 +543,7 @@ export function CanvasStage({
             <path
               d={pointsToPath(draft.points.flatMap((point) => [point.x, point.y]))}
               fill="none"
-              stroke="#121212"
+              stroke={DEFAULT_INK}
               strokeWidth={3}
               strokeLinecap="round"
               strokeLinejoin="round"
@@ -606,7 +606,7 @@ export function CanvasStage({
                     key={end}
                     data-handle={`arrow-${end}`}
                     onPointerDown={(event) => startArrowEnd(event, end)}
-                    className="absolute size-3.5 -translate-x-1/2 -translate-y-1/2 cursor-move rounded-full border-2 border-focus bg-white"
+                    className="absolute size-3.5 -translate-x-1/2 -translate-y-1/2 cursor-move rounded-full border-2 border-focus bg-surface"
                     style={{ left: point.x, top: point.y }}
                   />
                 );
@@ -692,7 +692,7 @@ function ResizeHandles({
           data-handle={handle}
           onPointerDown={(event) => onStart(event, handle)}
           className={cn(
-            "pointer-events-auto absolute size-3 rounded-[3px] border-[1.5px] border-focus bg-white",
+            "pointer-events-auto absolute size-3 rounded-[3px] border-[1.5px] border-focus bg-surface",
             handle === "nw" && "-left-1.5 -top-1.5 cursor-nwse-resize",
             handle === "ne" && "-right-1.5 -top-1.5 cursor-nesw-resize",
             handle === "sw" && "-bottom-1.5 -left-1.5 cursor-nesw-resize",
@@ -777,7 +777,7 @@ function TextEditor({ object, camera, onCommit, onCancel }: TextEditorProps) {
           event.currentTarget.blur();
         }
       }}
-      className="absolute resize-none overflow-hidden bg-transparent outline-2 outline-offset-2 outline-focus"
+      className="board-ink absolute resize-none overflow-hidden bg-transparent outline-2 outline-offset-2 outline-focus"
       style={{
         left: origin.x,
         top: origin.y,
@@ -788,7 +788,7 @@ function TextEditor({ object, camera, onCommit, onCancel }: TextEditorProps) {
         fontSize,
         fontWeight: object.props.bold ? 600 : 400,
         lineHeight: LINE_HEIGHT,
-        color: object.props.color ?? "#121212",
+        color: object.props.color ?? DEFAULT_INK,
         textAlign: object.props.textAlign ?? (centered ? "center" : "left"),
         borderRadius: 6,
       }}

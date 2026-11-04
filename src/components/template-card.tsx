@@ -36,7 +36,7 @@ export function TemplateCard({
       <div className="canvas-grid relative aspect-[16/10] border-b border-line [background-size:14px_14px]">
         <BoardPreview objects={content} label={`Preview of the ${name} template`} padding={60} className="p-3" />
         {lockedPlan ? (
-          <span className="absolute right-3 top-3 inline-flex items-center gap-1.5 rounded-full bg-ink px-2.5 py-1 text-xs font-medium text-white">
+          <span className="absolute right-3 top-3 inline-flex items-center gap-1.5 rounded-full bg-ink px-2.5 py-1 text-xs font-medium text-canvas">
             <Lock className="size-3" aria-hidden />
             {lockedPlan} plan
           </span>

@@ -55,6 +55,8 @@ export interface WorkspaceUser {
   last_name: string;
   username: string;
   avatar_url: string;
+  email?: string;
+  theme_preference?: "system" | "light" | "dark";
 }
 
 interface BoardWorkspaceProps {

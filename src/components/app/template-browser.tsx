@@ -87,7 +87,7 @@ export function TemplateBrowser({
                 className={cn(
                   "inline-flex min-h-11 items-center rounded-full border px-4 text-sm transition-colors",
                   active
-                    ? "border-ink bg-ink text-surface"
+                    ? "border-accent bg-accent text-on-accent"
                     : "border-line bg-surface text-ink hover:border-line-strong",
                 )}
               >

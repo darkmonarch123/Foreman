@@ -12,6 +12,7 @@ import {
   type ReactElement,
   type ReactNode,
 } from "react";
+import { Check } from "lucide-react";
 import { createPortal } from "react-dom";
 import { cn } from "@/lib/cn";
 
@@ -25,7 +26,12 @@ export interface MenuItem {
   /** Draws a separator above this item. */
   separated?: boolean;
   shortcut?: string;
+  /** Makes this one of a set of options (role menuitemradio); true marks the current one. */
+  checked?: boolean;
 }
+
+const ITEM_SELECTOR =
+  '[role="menuitem"]:not([aria-disabled="true"]), [role="menuitemradio"]:not([aria-disabled="true"])';
 
 /**
  * Before its position is measured the menu is transparent rather than hidden,
@@ -41,22 +47,22 @@ interface MenuListProps {
   className?: string;
   id?: string;
   listRef?: React.RefObject<HTMLDivElement | null>;
+  /** Non-interactive content shown above the items (for example who is signed in). */
+  header?: ReactNode;
 }
 
 /** The menu surface: roving focus with arrow keys, Home/End, type-ahead, Escape to close. */
-function MenuList({ items, label, onClose, style, className, id, listRef }: MenuListProps) {
+function MenuList({ items, label, onClose, style, className, id, listRef, header }: MenuListProps) {
   const localRef = useRef<HTMLDivElement>(null);
   const ref = listRef ?? localRef;
 
   useEffect(() => {
-    const first = ref.current?.querySelector<HTMLElement>('[role="menuitem"]:not([aria-disabled="true"])');
+    const first = ref.current?.querySelector<HTMLElement>(ITEM_SELECTOR);
     first?.focus();
   }, [ref]);
 
   function onKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
-    const nodes = Array.from(
-      ref.current?.querySelectorAll<HTMLElement>('[role="menuitem"]:not([aria-disabled="true"])') ?? [],
-    );
+    const nodes = Array.from(ref.current?.querySelectorAll<HTMLElement>(ITEM_SELECTOR) ?? []);
     const index = nodes.indexOf(document.activeElement as HTMLElement);
     if (event.key === "ArrowDown") {
       event.preventDefault();
@@ -93,12 +99,14 @@ function MenuList({ items, label, onClose, style, className, id, listRef }: Menu
         className,
       )}
     >
+      {header ? <div role="none">{header}</div> : null}
       {items.map((item) => (
         <div key={item.id} role="none">
           {item.separated ? <div role="separator" className="my-1.5 h-px bg-line" /> : null}
           <button
             type="button"
-            role="menuitem"
+            role={item.checked === undefined ? "menuitem" : "menuitemradio"}
+            aria-checked={item.checked}
             tabIndex={-1}
             aria-disabled={item.disabled || undefined}
             onClick={() => {
@@ -107,7 +115,7 @@ function MenuList({ items, label, onClose, style, className, id, listRef }: Menu
               item.onSelect();
             }}
             className={cn(
-              "flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm outline-none",
+              "flex min-h-9 w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm outline-none pointer-coarse:min-h-11",
               "focus:bg-ink/6 hover:bg-ink/6 aria-disabled:opacity-40",
               item.danger ? "text-error" : "text-ink",
             )}
@@ -115,6 +123,7 @@ function MenuList({ items, label, onClose, style, className, id, listRef }: Menu
             {item.icon ? <span className="shrink-0 text-current [&_svg]:size-4">{item.icon}</span> : null}
             <span className="min-w-0 flex-1 truncate">{item.label}</span>
             {item.shortcut ? <kbd className="text-xs text-muted">{item.shortcut}</kbd> : null}
+            {item.checked ? <Check className="size-4 shrink-0 text-accent-ink" aria-hidden /> : null}
           </button>
         </div>
       ))}
@@ -154,9 +163,10 @@ interface DropdownMenuProps {
   label: string;
   align?: "start" | "end";
   side?: "bottom" | "top";
+  header?: ReactNode;
 }
 
-export function DropdownMenu({ trigger, items, label, align = "end", side = "bottom" }: DropdownMenuProps) {
+export function DropdownMenu({ trigger, items, label, align = "end", side = "bottom", header }: DropdownMenuProps) {
   const [open, setOpen] = useState(false);
   const [position, setPosition] = useState<React.CSSProperties>(UNPOSITIONED);
   const triggerRef = useRef<HTMLElement>(null);
@@ -198,7 +208,15 @@ export function DropdownMenu({ trigger, items, label, align = "end", side = "bot
       })}
       {open && typeof document !== "undefined"
         ? createPortal(
-            <MenuList id={menuId} items={items} label={label} onClose={close} style={position} listRef={listRef} />,
+            <MenuList
+              id={menuId}
+              header={header}
+              items={items}
+              label={label}
+              onClose={close}
+              style={position}
+              listRef={listRef}
+            />,
             document.body,
           )
         : null}
