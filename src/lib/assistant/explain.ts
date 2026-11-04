@@ -28,8 +28,21 @@ const NAMES: Record<CanvasObjectType, [string, string]> = {
 
 const MAX_EVIDENCE = 5;
 
-function row(partial: Omit<Finding, "rule_id" | "proposal" | "target_object_id" | "target_object_version">): Finding {
-  return { rule_id: null, proposal: null, target_object_id: null, target_object_version: null, ...partial };
+function row(
+  partial: Omit<
+    Finding,
+    "rule_id" | "proposal" | "target_object_id" | "target_object_version" | "usefulness" | "fingerprint"
+  >,
+): Finding {
+  return {
+    rule_id: null,
+    proposal: null,
+    target_object_id: null,
+    target_object_version: null,
+    usefulness: null,
+    fingerprint: null,
+    ...partial,
+  };
 }
 
 export function explainBoard(ctx: Ctx): Finding[] {

@@ -849,11 +849,15 @@ describe("pre-flight run check", () => {
       "assistant_accept_proposal",
       "assistant_board_snapshot",
       "assistant_check_run",
+      "assistant_clear_feedback",
       "assistant_create_run",
       "assistant_edit_proposal",
+      "assistant_hidden_rules_for",
       "assistant_list_proposals",
       "assistant_mark_viewed",
       "assistant_reject_proposal",
+      "assistant_set_feedback",
+      "assistant_set_rule_hidden",
     ]);
   });
 });

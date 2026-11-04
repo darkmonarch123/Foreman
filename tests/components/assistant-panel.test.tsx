@@ -435,3 +435,79 @@ describe("Assistant panel", () => {
     trigger.remove();
   });
 });
+
+describe("Assistant v1.1: ranking, bands and feedback", () => {
+  const manyNotes = () =>
+    [
+      "Who owns onboarding?",
+      "Why churn is rising",
+      "TBD",
+      "Fix the billing bug",
+      "Who decides pricing?",
+      "misc",
+      "Ship v2",
+    ].map((text, index) => note(text, (index % 4) * 600, Math.floor(index / 4) * 600));
+
+  it("shows the five most useful findings first, then the rest on request", async () => {
+    const user = userEvent.setup();
+    const s = setup("OWNER", manyNotes());
+    render(panel(s));
+    await runGaps(user);
+    const more = await screen.findByRole("button", { name: /Show more findings/ });
+    const cards = () =>
+      screen.getAllByRole("listitem").filter((item) => item.getAttribute("aria-labelledby")?.startsWith("finding-"));
+    expect(cards()).toHaveLength(5);
+    await user.click(more);
+    expect(screen.queryByRole("button", { name: /Show more findings/ })).toBeNull();
+    expect(cards().length).toBeGreaterThan(5);
+  });
+
+  it("labels each finding Clear, Likely or Possible with a short explanation", async () => {
+    const user = userEvent.setup();
+    const s = setup("OWNER", [note("Who owns onboarding?")]);
+    render(panel(s));
+    await runGaps(user);
+    const card = await gapReady();
+    expect(within(card).getByText(/^(Clear|Likely|Possible)$/)).toBeInTheDocument();
+    expect(within(card).getByText(/^(Clear|Likely|Possible): /)).toBeInTheDocument();
+  });
+
+  it("records Not helpful with reasons, hides the type, and can remove the feedback", async () => {
+    const user = userEvent.setup();
+    const s = setup("OWNER", [note("Who owns onboarding?")]);
+    render(panel(s));
+    await runGaps(user);
+    const card = await gapReady();
+    await user.click(within(card).getByRole("button", { name: "Not helpful" }));
+    expect(within(card).getByRole("button", { name: "Not helpful" })).toHaveAttribute("aria-pressed", "true");
+    await user.click(within(card).getByRole("button", { name: "Duplicate" }));
+    await waitFor(() =>
+      expect(within(card).getByRole("button", { name: "Duplicate" })).toHaveAttribute("aria-pressed", "true"),
+    );
+    const [proposalId] = [...s.memory.feedback.keys()];
+    expect(s.memory.feedback.get(proposalId)).toEqual({ helpful: false, reasons: ["duplicate"] });
+
+    await user.click(within(card).getByRole("button", { name: "Hide this type of finding on this board" }));
+    await waitFor(() => expect(s.memory.hidden.get(ME)?.size).toBe(1));
+
+    await user.click(within(card).getByRole("button", { name: "Not helpful" }));
+    await waitFor(() => expect(s.memory.feedback.size).toBe(0));
+    expect(s.memory.events).toEqual(expect.arrayContaining([`feedback_removed ${proposalId}`]));
+  });
+
+  it("goes back if saving feedback fails", async () => {
+    const user = userEvent.setup();
+    const s = setup("OWNER", [note("Who owns onboarding?")]);
+    const services = s.memory.servicesFor(ME);
+    services.setFeedback = vi.fn(async () => {
+      throw new AppError("NETWORK");
+    });
+    render(panel(s, { services }));
+    await runGaps(user);
+    const card = await gapReady();
+    await user.click(within(card).getByRole("button", { name: "Helpful" }));
+    await waitFor(() =>
+      expect(within(card).getByRole("button", { name: "Helpful" })).toHaveAttribute("aria-pressed", "false"),
+    );
+  });
+});

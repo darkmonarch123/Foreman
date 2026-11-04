@@ -11,11 +11,26 @@ import { logServerError, newRequestId } from "@/lib/log";
 import { createClient } from "@/lib/supabase/server";
 import { analyze } from "./analyze";
 import { isAssistantEnabled } from "./flag";
-import { boardOnlySchema, editProposalSchema, proposalIdSchema, runAnalysisSchema } from "./schemas";
+import {
+  boardOnlySchema,
+  editProposalSchema,
+  feedbackSchema,
+  proposalIdSchema,
+  ruleHiddenSchema,
+  runAnalysisSchema,
+} from "./schemas";
+import { templateContextFor } from "./template-context";
 import { errorCode, logAssistant } from "./telemetry";
 import { timedQuery } from "@/lib/perf/queries";
 import { logPerf } from "@/lib/perf/server";
-import type { AssistantAcceptResult, AssistantProposalRecord, AssistantRunResult, Finding } from "./types";
+import type {
+  AssistantAcceptResult,
+  AssistantFeedback,
+  AssistantProposalRecord,
+  AssistantRunResult,
+  FeedbackSummary,
+  Finding,
+} from "./types";
 
 /**
  * Foreman Assistant Server Actions.
@@ -80,6 +95,7 @@ interface SnapshotObject {
   rotation: number;
   z_index: number | string;
   version: number;
+  updated_at?: string;
   props: { text?: string };
 }
 
@@ -87,6 +103,8 @@ interface BoardSnapshot {
   role: "OWNER" | "EDITOR" | "VIEWER";
   objects: SnapshotObject[];
   comments: { id: string; object_id: string | null }[];
+  template?: { slug: string; category: string } | null;
+  feedback?: FeedbackSummary | null;
 }
 
 function toCanvasObject(row: SnapshotObject): CanvasObject {
@@ -97,7 +115,7 @@ function toCanvasObject(row: SnapshotObject): CanvasObject {
     deleted: false,
     created_by: null,
     updated_by: null,
-    updated_at: "",
+    updated_at: row.updated_at ?? "",
   };
 }
 
@@ -134,6 +152,8 @@ export async function runAssistantAnalysis(input: unknown): Promise<ActionResult
       comments: snapshot.comments,
       context: request.context,
       guidance: request.guidance,
+      feedback: snapshot.feedback ?? null,
+      template: templateContextFor(snapshot.template),
     });
 
     const proposals = await rpc<AssistantProposalRecord[]>(supabase, "assistant_create_run", {
@@ -166,6 +186,8 @@ export async function runAssistantAnalysis(input: unknown): Promise<ActionResult
       exclusions: result.exclusions,
       guidanceIgnored: result.guidanceIgnored,
       truncated: result.truncated,
+      suppressed: result.suppressed,
+      template: result.template,
     });
   } catch (error) {
     logPerf({
@@ -199,6 +221,8 @@ function findingPayload(finding: Finding) {
     proposal: finding.proposal,
     target_object_id: finding.target_object_id,
     target_object_version: finding.target_object_version,
+    usefulness: finding.usefulness,
+    fingerprint: finding.fingerprint,
   };
 }
 
@@ -324,5 +348,71 @@ export async function acceptAssistantProposal(input: unknown): Promise<ActionRes
       ...(perfContext ?? {}),
     });
     return fail("assistant.accept", requestId, error);
+  }
+}
+
+// -- feedback ------------------------------------------------------------------
+// Feedback changes how future runs rank findings. It never touches the board.
+
+export async function setAssistantFeedback(input: unknown): Promise<ActionResult<AssistantFeedback>> {
+  let requestId: string | undefined;
+  try {
+    const ctx = await context("assistant.feedback");
+    requestId = ctx.requestId;
+    const { proposalId, helpful, reasons, hideRule } = parse(feedbackSchema, input);
+    const feedback = await rpc<AssistantFeedback>(ctx.supabase, "assistant_set_feedback", {
+      p_proposal_id: proposalId,
+      p_helpful: helpful,
+      p_reasons: reasons,
+      p_hide_rule: hideRule,
+    });
+    logAssistant("assistant.feedback", { requestId, outcome: helpful ? "helpful" : "not_helpful" });
+    return actionSuccess(feedback);
+  } catch (error) {
+    return fail("assistant.feedback", requestId, error);
+  }
+}
+
+export async function clearAssistantFeedback(input: unknown): Promise<ActionResult<null>> {
+  let requestId: string | undefined;
+  try {
+    const ctx = await context("assistant.feedback");
+    requestId = ctx.requestId;
+    const { proposalId } = parse(proposalIdSchema, input);
+    await rpc<boolean>(ctx.supabase, "assistant_clear_feedback", { p_proposal_id: proposalId });
+    logAssistant("assistant.feedback", { requestId, outcome: "cleared" });
+    return actionSuccess(null);
+  } catch (error) {
+    return fail("assistant.feedback", requestId, error);
+  }
+}
+
+export async function setAssistantRuleHidden(input: unknown): Promise<ActionResult<null>> {
+  let requestId: string | undefined;
+  try {
+    const ctx = await context("assistant.feedback");
+    requestId = ctx.requestId;
+    const { boardId, ruleId, hidden } = parse(ruleHiddenSchema, input);
+    await rpc<boolean>(ctx.supabase, "assistant_set_rule_hidden", {
+      p_board_id: boardId,
+      p_rule_id: ruleId,
+      p_hidden: hidden,
+    });
+    logAssistant("assistant.feedback", { requestId, outcome: hidden ? "rule_hidden" : "rule_shown" });
+    return actionSuccess(null);
+  } catch (error) {
+    return fail("assistant.feedback", requestId, error);
+  }
+}
+
+export async function getAssistantHiddenRules(input: unknown): Promise<ActionResult<string[]>> {
+  let requestId: string | undefined;
+  try {
+    const ctx = await context("assistant.feedback");
+    requestId = ctx.requestId;
+    const { boardId } = parse(boardOnlySchema, input);
+    return actionSuccess(await rpc<string[]>(ctx.supabase, "assistant_hidden_rules_for", { p_board_id: boardId }));
+  } catch (error) {
+    return fail("assistant.feedback", requestId, error);
   }
 }

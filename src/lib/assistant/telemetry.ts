@@ -16,7 +16,20 @@ export interface AssistantLogFields {
   action?: string;
   contextKind?: "board" | "object";
   findings?: number;
-  outcome: "ok" | "error" | "disabled" | "denied" | "stale" | "applied" | "rejected" | "failed";
+  outcome:
+    | "ok"
+    | "error"
+    | "disabled"
+    | "denied"
+    | "stale"
+    | "applied"
+    | "rejected"
+    | "failed"
+    | "helpful"
+    | "not_helpful"
+    | "cleared"
+    | "rule_hidden"
+    | "rule_shown";
   /** Normalised error code, never the upstream message. */
   code?: string;
   durationMs?: number;

@@ -229,6 +229,7 @@ describe("runAssistantAnalysis", () => {
         "confidence",
         "evidence",
         "explanation",
+        "fingerprint",
         "label",
         "proposal",
         "rule_id",
@@ -236,7 +237,10 @@ describe("runAssistantAnalysis", () => {
         "target_object_id",
         "target_object_version",
         "title",
+        "usefulness",
       ]);
+      // The fingerprint is a rule id and object ids only: never text.
+      expect(finding.fingerprint).toMatch(/^[a-z_]+:[0-9a-f,-]+$/);
     }
   });
 

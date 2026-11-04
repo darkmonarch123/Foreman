@@ -61,7 +61,7 @@ describe("assistant_board_snapshot", () => {
     const drawing = result.objects.find((object) => object.id !== objectId)!;
     expect(drawing.props).toEqual({});
     expect(Object.keys(note).sort()).toEqual(
-      ["height", "id", "props", "rotation", "type", "version", "width", "x", "y", "z_index"].sort(),
+      ["height", "id", "props", "rotation", "type", "updated_at", "version", "width", "x", "y", "z_index"].sort(),
     );
     expect(result.comments).toEqual([{ id: expect.any(String), object_id: objectId }]);
     expect(JSON.stringify(result)).not.toContain("Secret comment body");

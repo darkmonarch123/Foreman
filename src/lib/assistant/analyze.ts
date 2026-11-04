@@ -3,6 +3,7 @@ import { buildCtx, readingOrder, type Ctx } from "./context";
 import { explainBoard, explainObject } from "./explain";
 import { boxOf, findFreeSpot, type Box } from "./geometry";
 import { mentionsAny, parseGuidance } from "./guidance";
+import { fingerprintOf, rankFindings, score, type ScoredFinding } from "./rank";
 import { RULES, type RawFinding } from "./rules";
 import { round2 } from "./text";
 import {
@@ -46,7 +47,7 @@ function proposalFor(text: string, spot: { x: number; y: number }): ProposalDraf
   };
 }
 
-function finalize(raws: RawFinding[], ctx: Ctx): Finding[] {
+function finalize(raws: ScoredFinding[], ctx: Ctx): Finding[] {
   const occupied: Box[] = [...ctx.occupied];
   return raws.map((raw) => {
     const anchor = ctx.byId.get(raw.anchorId);
@@ -68,6 +69,8 @@ function finalize(raws: RawFinding[], ctx: Ctx): Finding[] {
       proposal,
       target_object_id: proposal ? (raw.evidence[0]?.object_id ?? null) : null,
       target_object_version: proposal ? (raw.evidence[0]?.version ?? null) : null,
+      usefulness: raw.usefulness,
+      fingerprint: raw.fingerprint,
     };
   });
 }
@@ -90,11 +93,14 @@ function rank(a: RawFinding, b: RawFinding): number {
 export function analyze(input: AnalysisInput): AnalysisResult {
   const guidance = parseGuidance(input.guidance);
   const ctx = buildCtx(input.objects, input.comments, (note) => mentionsAny(note.text, guidance.terms));
-  const result = (findings: Finding[], truncated = false): AnalysisResult => ({
+  const template = input.template ?? null;
+  const result = (findings: Finding[], truncated = false, suppressed = 0): AnalysisResult => ({
     findings,
     exclusions: guidance.terms,
     guidanceIgnored: guidance.ignored,
     truncated,
+    suppressed,
+    template,
   });
 
   const contextId = input.context.kind === "object" ? input.context.objectId : null;
@@ -122,8 +128,20 @@ export function analyze(input: AnalysisInput): AnalysisResult {
     }
   }
   raws.sort(rank);
-  const top = raws.slice(0, MAX_FINDINGS);
-  return result(finalize(top, ctx), raws.length > MAX_FINDINGS);
+  const options = { byId: ctx.byId, feedback: input.feedback, template, now: input.now ?? Date.now() };
+  const { ranked, suppressed } =
+    input.postprocess === false
+      ? {
+          ranked: raws.map((raw) => ({
+            ...raw,
+            usefulness: score(raw, options),
+            fingerprint: fingerprintOf(raw.rule_id, raw.evidence),
+          })),
+          suppressed: 0,
+        }
+      : rankFindings(raws, options, rank);
+  const top = ranked.slice(0, MAX_FINDINGS);
+  return result(finalize(top, ctx), ranked.length > MAX_FINDINGS, suppressed);
 }
 
 export { readingOrder };

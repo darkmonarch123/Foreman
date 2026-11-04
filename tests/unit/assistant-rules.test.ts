@@ -7,7 +7,15 @@ import { arrow, makeObject, note, resetFixtureIds } from "../support/assistant-f
 beforeEach(resetFixtureIds);
 
 function run(objects: CanvasObject[], extra: Partial<AnalysisInput> = {}): ReturnType<typeof analyze> {
-  return analyze({ action: "propose_plan", objects, comments: [], context: { kind: "board" }, ...extra });
+  // Rules are tested on their own here; merging, combining and ranking are tested in assistant-rank.test.ts.
+  return analyze({
+    action: "propose_plan",
+    objects,
+    comments: [],
+    context: { kind: "board" },
+    postprocess: false,
+    ...extra,
+  });
 }
 
 function findings(objects: CanvasObject[], rule: RuleId, extra: Partial<AnalysisInput> = {}): Finding[] {

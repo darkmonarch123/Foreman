@@ -1,6 +1,10 @@
 import { analyze } from "@/lib/assistant/analyze";
+import { templateContextFor } from "@/lib/assistant/template-context";
 import type {
   AssistantAcceptResult,
+  AssistantFeedback,
+  FeedbackRequest,
+  FeedbackSummary,
   AssistantProposalRecord,
   AssistantRunRequest,
   AssistantRunResult,
@@ -25,12 +29,62 @@ export class MemoryAssistant {
   private counter = 0;
   /** Operation log for audit-style assertions: "<event> <proposal id>". */
   events: string[] = [];
+  /** Feedback per proposal (the proposal's owner is the only one who can give it). */
+  feedback = new Map<string, AssistantFeedback>();
+  /** Hidden rule ids per user. */
+  hidden = new Map<string, Set<string>>();
 
   constructor(
     private readonly board: FakeBoardServer,
     private readonly roleOf: (userId: string) => BoardRole | null,
     private readonly boardId = "board",
+    private readonly template: { slug: string; category: string } | null = null,
   ) {}
+
+  summary(userId: string): FeedbackSummary {
+    const rules: FeedbackSummary["rules"] = {};
+    const notHelpful: string[] = [];
+    for (const [proposalId, feedback] of this.feedback) {
+      if (this.owners.get(proposalId) !== userId) continue;
+      const record = this.proposals.get(proposalId);
+      if (!record?.rule_id) continue;
+      const entry = (rules[record.rule_id] ??= { helpful: 0, not_helpful: 0 });
+      if (feedback.helpful) entry.helpful += 1;
+      else {
+        entry.not_helpful += 1;
+        if (record.fingerprint) notHelpful.push(record.fingerprint);
+      }
+    }
+    return { hidden_rules: [...(this.hidden.get(userId) ?? [])].sort(), rules, not_helpful: notHelpful };
+  }
+
+  setFeedback(userId: string, proposalId: string, request: FeedbackRequest): AssistantFeedback {
+    this.role(userId);
+    const record = this.own(userId, proposalId);
+    const reasons = request.helpful ? [] : [...new Set(request.reasons ?? [])].sort();
+    if (request.helpful && (request.reasons ?? []).length > 0) throw new AppError("VALIDATION_FAILED");
+    const feedback: AssistantFeedback = { helpful: request.helpful, reasons };
+    this.feedback.set(proposalId, feedback);
+    this.events.push(`feedback_set ${proposalId}`);
+    if (request.hideRule && record.rule_id) this.setRuleHidden(userId, record.rule_id, true);
+    return feedback;
+  }
+
+  clearFeedback(userId: string, proposalId: string): void {
+    this.role(userId);
+    this.own(userId, proposalId);
+    if (this.feedback.delete(proposalId)) this.events.push(`feedback_removed ${proposalId}`);
+  }
+
+  setRuleHidden(userId: string, ruleId: string, hidden: boolean): void {
+    this.role(userId);
+    const set = this.hidden.get(userId) ?? new Set<string>();
+    if (hidden && !set.has(ruleId)) this.events.push(`rule_hidden ${ruleId}`);
+    if (!hidden && set.has(ruleId)) this.events.push(`rule_unhidden ${ruleId}`);
+    if (hidden) set.add(ruleId);
+    else set.delete(ruleId);
+    this.hidden.set(userId, set);
+  }
 
   private role(userId: string): BoardRole {
     const role = this.roleOf(userId);
@@ -54,6 +108,8 @@ export class MemoryAssistant {
       comments: [],
       context: request.context,
       guidance: request.guidance,
+      feedback: this.summary(userId),
+      template: templateContextFor(this.template),
     });
     for (const [id, record] of this.proposals) {
       if (this.owners.get(id) === userId && record.status === "pending") {
@@ -77,6 +133,8 @@ export class MemoryAssistant {
         label: finding.label,
         severity: finding.severity,
         confidence: finding.confidence,
+        usefulness: finding.usefulness,
+        fingerprint: finding.fingerprint,
         evidence: finding.evidence,
         proposal: finding.proposal,
         edited_proposal: null,
@@ -96,12 +154,16 @@ export class MemoryAssistant {
       exclusions: result.exclusions,
       guidanceIgnored: result.guidanceIgnored,
       truncated: result.truncated,
+      suppressed: result.suppressed,
+      template: result.template,
     };
   }
 
   list(userId: string): AssistantProposalRecord[] {
     this.role(userId);
-    return [...this.proposals.values()].filter((record) => this.owners.get(record.id) === userId);
+    return [...this.proposals.values()]
+      .filter((record) => this.owners.get(record.id) === userId)
+      .map((record) => ({ ...record, feedback: this.feedback.get(record.id) ?? null }));
   }
 
   private own(userId: string, proposalId: string): AssistantProposalRecord {
@@ -205,6 +267,10 @@ export class MemoryAssistant {
       edit: async (proposalId, proposal) => this.edit(userId, proposalId, proposal),
       reject: async (proposalId) => this.reject(userId, proposalId),
       accept: async (proposalId) => this.accept(userId, proposalId),
+      setFeedback: async (proposalId, feedback) => this.setFeedback(userId, proposalId, feedback),
+      clearFeedback: async (proposalId) => this.clearFeedback(userId, proposalId),
+      setRuleHidden: async (ruleId, hidden) => this.setRuleHidden(userId, ruleId, hidden),
+      hiddenRules: async () => [...(this.hidden.get(userId) ?? [])].sort(),
     };
   }
 }
