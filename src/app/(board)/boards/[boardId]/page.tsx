@@ -7,7 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { requireProfile } from "@/lib/auth/dal";
 import type { Member } from "@/lib/board/services";
 import type { BoardState } from "@/lib/board/types";
-import { getBoardMembers, isUuid, loadBoardState } from "@/lib/boards/data";
+import { isUuid, loadBoardPage } from "@/lib/boards/data";
 import { isAssistantEnabled } from "@/lib/assistant/flag";
 import { toAppError } from "@/lib/errors";
 import { timeServer } from "@/lib/perf/server";
@@ -23,17 +23,14 @@ async function BoardLoader({ params, searchParams }: { params: Params; searchPar
   const openAssistant = (await searchParams).assistant === "open";
   const profile = await requireProfile(isUuid(boardId) ? `/boards/${boardId}` : "/dashboard");
 
-  // Both calls are authorised in the database against the signed-in user.
   let loaded: { state: BoardState; members: Member[] } | null = null;
   let failure: string | null = null;
   try {
     loaded = await timeServer(
       "board_open",
       { boardId: isUuid(boardId) ? boardId : undefined, userId: profile.id },
-      async () => {
-        const state = await loadBoardState(boardId);
-        return state ? { state, members: await getBoardMembers(boardId) } : null;
-      },
+      // One round trip for state and members; the database checks membership.
+      () => loadBoardPage(boardId),
     );
   } catch (error) {
     const appError = toAppError(error);
