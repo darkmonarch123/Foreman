@@ -517,3 +517,153 @@ describe("subscription", () => {
     expect(listener).not.toHaveBeenCalled();
   });
 });
+
+describe("objects created on the server for this person (accepted Assistant proposals)", () => {
+  /** Creates an object as `actor` straight on the server, the way the accept function does. */
+  function createOnServer(server: FakeBoardServer, actor: string, id: string, text = "Decide: pricing") {
+    server.apply(actor, {
+      operation_id: `op-${id}`,
+      type: "OBJECT_CREATED",
+      object_id: id,
+      payload: { ...NOTE, props: { text } },
+      expected_version: null,
+      client_timestamp: new Date(0).toISOString(),
+    });
+    return server.log.at(-1)!;
+  }
+
+  it("adopts the server operation without queueing or re-sending anything", async () => {
+    const server = new FakeBoardServer();
+    const { engine, store } = connect(server, "ada", { realtime: false });
+    const operation = createOnServer(server, "ada", "assistant-1");
+    const submitsBefore = server.submitCalls.length;
+
+    engine.adoptServerCreate(operation);
+    await settle();
+
+    expect(engine.getSnapshot().byId.get("assistant-1")).toMatchObject({ version: 1 });
+    expect(engine.getSnapshot()).toMatchObject({ pendingCount: 0, canUndo: true });
+    expect(store.load()).toEqual([]);
+    expect(server.submitCalls.length).toBe(submitsBefore);
+  });
+
+  it("undo removes it with a new compensating operation, and redo restores it", async () => {
+    const server = new FakeBoardServer();
+    const { engine } = connect(server, "ada", { realtime: false });
+    engine.adoptServerCreate(createOnServer(server, "ada", "assistant-1"));
+
+    expect(engine.undo()).toBe(true);
+    await settle();
+    expect(server.objects.get("assistant-1")?.deleted).toBe(true);
+    expect(server.log.map((o) => o.type)).toEqual(["OBJECT_CREATED", "OBJECT_DELETED"]);
+
+    expect(engine.redo()).toBe(true);
+    await settle();
+    expect(server.objects.get("assistant-1")?.deleted).toBe(false);
+  });
+
+  it("does not add a second history entry when the same operation arrives twice", () => {
+    const server = new FakeBoardServer();
+    const { engine } = connect(server, "ada", { realtime: false });
+    const operation = createOnServer(server, "ada", "assistant-1");
+    engine.adoptServerCreate(operation);
+    engine.adoptServerCreate(operation);
+    expect(engine.undo()).toBe(true);
+    expect(engine.undo()).toBe(false);
+  });
+
+  it("does not make someone else's object undoable for this person", () => {
+    const server = new FakeBoardServer();
+    const { engine } = connect(server, "ada", { realtime: false });
+    engine.adoptServerCreate(createOnServer(server, "ben", "theirs"));
+    expect(engine.getSnapshot().byId.has("theirs")).toBe(true);
+    expect(engine.getSnapshot().canUndo).toBe(false);
+  });
+
+  it("undoObject undoes one specific object and leaves the other history alone", async () => {
+    const server = new FakeBoardServer();
+    const { engine } = connect(server, "ada", { realtime: false });
+    engine.adoptServerCreate(createOnServer(server, "ada", "assistant-1", "first"));
+    engine.adoptServerCreate(createOnServer(server, "ada", "assistant-2", "second"));
+    const mine = engine.create(NOTE)!;
+    await settle();
+
+    expect(engine.undoObject("assistant-1")).toBe(true);
+    await settle();
+
+    expect(server.objects.get("assistant-1")?.deleted).toBe(true);
+    expect(server.objects.get("assistant-2")?.deleted).toBe(false);
+    expect(server.objects.get(mine)?.deleted).toBe(false);
+    // Ctrl+Z still undoes the most recent change, not the one already undone.
+    expect(engine.undo()).toBe(true);
+    await settle();
+    expect(server.objects.get(mine)?.deleted).toBe(true);
+    expect(engine.undoObject("assistant-1")).toBe(false);
+  });
+
+  it("refuses to undo a proposal's object after someone else edited it", async () => {
+    const server = new FakeBoardServer();
+    const { engine, notices } = connect(server, "ada");
+    engine.adoptServerCreate(createOnServer(server, "ada", "assistant-1"));
+    // Ben edits it; the realtime channel delivers that to Ada's engine.
+    server.apply("ben", {
+      operation_id: "ben-move",
+      type: "OBJECT_MOVED",
+      object_id: "assistant-1",
+      payload: { x: 50, y: 50 },
+      expected_version: 1,
+      client_timestamp: new Date(0).toISOString(),
+    });
+    await settle();
+
+    expect(engine.undoObject("assistant-1")).toBe(false);
+    expect(server.objects.get("assistant-1")?.deleted).toBe(false);
+    expect(notices.some((n) => n.kind === "undo-blocked")).toBe(true);
+  });
+
+  it("undo removes only the Assistant's object and keeps a collaborator's later edit elsewhere", async () => {
+    const server = new FakeBoardServer();
+    const ada = connect(server, "ada");
+    const ben = connect(server, "ben");
+    const budget = ada.engine.create({ ...NOTE, props: { text: "Budget" } })!;
+    await settle();
+
+    ada.engine.adoptServerCreate(createOnServer(server, "ada", "assistant-1"));
+    // Ben edits a different note after the proposal was accepted.
+    ben.engine.update(budget, { props: { text: "Budget approved" } });
+    await settle();
+
+    expect(ada.engine.undoObject("assistant-1")).toBe(true);
+    await settle();
+
+    expect(server.objects.get("assistant-1")?.deleted).toBe(true);
+    expect(server.objects.get(budget)).toMatchObject({ deleted: false, props: { text: "Budget approved" } });
+    expect(ada.engine.getSnapshot().byId.get(budget)?.props.text).toBe("Budget approved");
+    // The only operation Ada's undo sent is the deletion of the Assistant's note.
+    expect(server.log.at(-1)).toMatchObject({ type: "OBJECT_DELETED", object_id: "assistant-1", actor_id: "ada" });
+  });
+
+  it("Ctrl+Z after a collaborator's later edit elsewhere still undoes only the Assistant's object", async () => {
+    const server = new FakeBoardServer();
+    const ada = connect(server, "ada");
+    const ben = connect(server, "ben");
+    const budget = ben.engine.create({ ...NOTE, props: { text: "Budget" } })!;
+    await settle();
+    ada.engine.adoptServerCreate(createOnServer(server, "ada", "assistant-1"));
+    ben.engine.update(budget, { props: { text: "Budget approved" } });
+    await settle();
+
+    expect(ada.engine.undo()).toBe(true);
+    await settle();
+    expect(server.objects.get("assistant-1")?.deleted).toBe(true);
+    expect(server.objects.get(budget)?.props.text).toBe("Budget approved");
+    // Nothing of Ben's is in Ada's history, so a second undo does nothing.
+    expect(ada.engine.undo()).toBe(false);
+  });
+
+  it("viewers cannot undo anything", () => {
+    const server = new FakeBoardServer();
+    const { engine } = connect(server, "vic", { canEdit: false, realtime: false });
+    expect(engine.undoObject("anything")).toBe(false);
+  });
+});

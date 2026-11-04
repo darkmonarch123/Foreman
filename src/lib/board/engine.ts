@@ -221,6 +221,61 @@ export class BoardEngine {
     this.emit();
   }
 
+  /**
+   * Adopts an object the server created on this person's behalf (an accepted Assistant proposal)
+   * and makes it individually undoable. The server already applied the operation, so nothing is
+   * queued or re-sent. Undo and redo then submit ordinary compensating operations
+   * (OBJECT_DELETED and OBJECT_RESTORED). Calling it again for the same object adds no second entry.
+   */
+  adoptServerCreate(operation: ServerOperation): void {
+    if (this.disposed) return;
+    this.ingest(operation);
+    const known = (entry: HistoryEntry) => entry.objectId === operation.object_id;
+    if (
+      operation.type === "OBJECT_CREATED" &&
+      operation.actor_id === this.userId &&
+      !this.undoStack.some(known) &&
+      !this.redoStack.some(known)
+    ) {
+      this.undoStack.push({
+        objectId: operation.object_id,
+        undo: { type: "OBJECT_DELETED", payload: {} },
+        redo: { type: "OBJECT_RESTORED", payload: {} },
+        blocked: false,
+      });
+      if (this.undoStack.length > MAX_HISTORY) this.undoStack.shift();
+      this.redoStack = [];
+    }
+    this.emit();
+  }
+
+  /**
+   * Undoes the change that created one specific object (for example one accepted Assistant
+   * proposal), whatever else has happened since, without touching other history entries.
+   * It is still an ordinary compensating operation, and it is refused if someone else has
+   * edited the object afterwards.
+   */
+  undoObject(objectId: string): boolean {
+    if (!this.canEdit) return false;
+    const index = this.undoStack.findIndex((entry) => entry.objectId === objectId);
+    if (index === -1) return false;
+    const [entry] = this.undoStack.splice(index, 1);
+    if (entry.blocked) {
+      this.undoStack.splice(index, 0, entry);
+      this.notify({
+        kind: "undo-blocked",
+        message: "That change can't be undone because someone else has edited the item since.",
+      });
+      this.emit();
+      return false;
+    }
+    const ok = this.dispatch(entry.undo.type, objectId, entry.undo.payload, false);
+    if (ok) this.redoStack.push(entry);
+    else this.undoStack.splice(index, 0, entry);
+    this.emit();
+    return ok;
+  }
+
   /** Browser online/offline signal. */
   setOnline(online: boolean): void {
     if (this.online === online) return;

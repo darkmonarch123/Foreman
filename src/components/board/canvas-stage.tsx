@@ -64,6 +64,8 @@ interface CanvasStageProps {
   onPointerWorld: (point: Point) => void;
   onContextMenu: (id: string | null, screen: Point) => void;
   onCommentTarget: (id: string | null) => void;
+  /** A temporary Assistant preview. Drawn only; never stored, sent or added to undo history. */
+  ghost?: Pick<CanvasObject, "type" | "x" | "y" | "width" | "height" | "props"> | null;
 }
 
 type Interaction =
@@ -105,6 +107,7 @@ export function CanvasStage({
   onPointerWorld,
   onContextMenu,
   onCommentTarget,
+  ghost = null,
 }: CanvasStageProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const interaction = useRef<Interaction | null>(null);
@@ -514,6 +517,22 @@ export function CanvasStage({
           {objects.map((object) => (
             <CanvasObjectView key={object.id} object={withPreview(object)} hideText={editingId === object.id} />
           ))}
+          {ghost ? (
+            <g data-testid="assistant-ghost" opacity={0.55} pointerEvents="none" aria-hidden="true">
+              <ObjectShape object={ghost} />
+              <rect
+                x={ghost.x - 3}
+                y={ghost.y - 3}
+                width={Math.max(1, ghost.width) + 6}
+                height={Math.max(1, ghost.height) + 6}
+                rx={8}
+                fill="none"
+                stroke="#2563EB"
+                strokeWidth={2 / camera.zoom}
+                strokeDasharray={`${6 / camera.zoom} ${4 / camera.zoom}`}
+              />
+            </g>
+          ) : null}
           {draft?.kind === "pen" ? (
             <path
               d={pointsToPath(draft.points.flatMap((point) => [point.x, point.y]))}

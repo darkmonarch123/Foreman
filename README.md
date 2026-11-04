@@ -68,6 +68,16 @@ comments, activity or presence.
 - **Accessibility.** A Board Outline lists every item with keyboard-operable actions; modals trap and return
   focus; status changes are announced. See [docs/accessibility.md](docs/accessibility.md).
 
+- **Foreman Assistant (feature flag, enabled on Render).** A rule-based planning helper in a
+  right-hand panel, opened with `F` or the top-bar button. It can explain the board, find planning gaps and
+  propose a plan, for the whole board or one selected item, with optional "leave this out" guidance. It is
+  deterministic and runs inside the app on data the signed-in person can already read: **no AI provider, no API
+  key and no board content leaves the system.** Every finding is labelled fact, inference or suggestion, with
+  confidence and evidence; a proposal only ever _adds_ one new object, and nothing changes until an editor
+  accepts it, on the normal operation path with a stale check, an audit trail and its own undo. A "What's new on Foreman" pop-up and dashboard card announce it for 30 days (2 November to 2 December 2026)
+  while it is enabled, linking to a how-to page at `/whats-new`. Enable it with
+  `ASSISTANT_ENABLED=true` (set in `render.yaml`); run the Assistant migration first. See [Foreman Assistant](docs/architecture.md#foreman-assistant).
+
 ### Not implemented (deliberately)
 
 - **Image upload.** The tool is hidden. The database rejects image objects. See
@@ -76,7 +86,8 @@ comments, activity or presence.
   the owner gets a link to pass on. Supabase Auth still sends verification and reset emails.
 - **Billing.** Every account is on the Free plan. Plus and Pro are described on the pricing section and cannot
   be purchased.
-- CRDT/OT, version-history UI, mobile canvas editing, calls, AI, marketplace.
+- CRDT/OT, version-history UI, mobile canvas editing, calls, marketplace, and any external AI. (The Assistant
+  above is rule-based and calls no model.)
 
 ---
 
@@ -159,12 +170,13 @@ and protected routes redirect to the login page.
 
 ## Environment variables
 
-| Variable                        | Where           | Purpose                                  |
-| ------------------------------- | --------------- | ---------------------------------------- |
-| `NEXT_PUBLIC_SUPABASE_URL`      | build + runtime | Supabase project URL                     |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | build + runtime | Anon/publishable key (public by design)  |
-| `NEXT_PUBLIC_SITE_URL`          | build + runtime | Exact public origin; used in email links |
-| `NEXT_PUBLIC_APP_URL`           | build + runtime | Fallback for the above                   |
+| Variable                        | Where           | Purpose                                                                                                       |
+| ------------------------------- | --------------- | ------------------------------------------------------------------------------------------------------------- |
+| `NEXT_PUBLIC_SUPABASE_URL`      | build + runtime | Supabase project URL                                                                                          |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | build + runtime | Anon/publishable key (public by design)                                                                       |
+| `NEXT_PUBLIC_SITE_URL`          | build + runtime | Exact public origin; used in email links                                                                      |
+| `NEXT_PUBLIC_APP_URL`           | build + runtime | Fallback for the above                                                                                        |
+| `ASSISTANT_ENABLED`             | runtime, server | `true` enables Foreman Assistant (`render.yaml` sets `true`). Unset: on in development, **off in production** |
 
 `NEXT_PUBLIC_*` values are compiled into the browser bundle, so they must be set **before the build**.
 Nothing secret may ever use that prefix. `SUPABASE_SERVICE_ROLE_KEY`, `AVATAR_PROVIDER_URL`,

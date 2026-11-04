@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
+import { createAssistantServices } from "@/lib/assistant/client-services";
 import type { Member } from "@/lib/board/services";
 import { createSupabaseBoardServices } from "@/lib/board/supabase-services";
 import type { BoardState } from "@/lib/board/types";
@@ -11,15 +12,34 @@ interface BoardClientProps {
   initial: BoardState;
   initialMembers: Member[];
   currentUser: WorkspaceUser;
+  /** The assistant_enabled flag, decided on the server. */
+  assistantEnabled?: boolean;
+  /** Open the Assistant panel on arrival (ignored when the Assistant is off). */
+  initialAssistantOpen?: boolean;
 }
 
 /** Wires the board UI to Supabase. Everything below this component is backend-agnostic. */
-export function BoardClient({ initial, initialMembers, currentUser }: BoardClientProps) {
+export function BoardClient({
+  initial,
+  initialMembers,
+  currentUser,
+  assistantEnabled = false,
+  initialAssistantOpen = false,
+}: BoardClientProps) {
   const services = useMemo(
-    () => createSupabaseBoardServices(getBrowserClient(), initial.board.id, currentUser.id),
-    [initial.board.id, currentUser.id],
+    () => ({
+      ...createSupabaseBoardServices(getBrowserClient(), initial.board.id, currentUser.id),
+      assistant: assistantEnabled ? createAssistantServices(initial.board.id) : null,
+    }),
+    [initial.board.id, currentUser.id, assistantEnabled],
   );
   return (
-    <BoardWorkspace initial={initial} initialMembers={initialMembers} currentUser={currentUser} services={services} />
+    <BoardWorkspace
+      initial={initial}
+      initialMembers={initialMembers}
+      currentUser={currentUser}
+      services={services}
+      initialAssistantOpen={initialAssistantOpen}
+    />
   );
 }

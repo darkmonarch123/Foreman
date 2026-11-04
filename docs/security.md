@@ -109,6 +109,7 @@ authenticated requests and to protected paths get `Cache-Control: private, no-st
 | Cookie           | `fm_recovery`                             | The user id a password-recovery link was verified for. `HttpOnly`, `SameSite=Lax`, `Secure` in production, `Path=/`   | 15 minutes; deleted when the password is set             |
 | `localStorage`   | `foreman:cookie-consent`                  | `{ version, analytics, preferences, decidedAt }`                                                                      | Until cleared or the consent version changes             |
 | `localStorage`   | `foreman:pending:v1:<user id>:<board id>` | Board operations the server has not acknowledged yet, at most 500. **Includes the text and geometry of those edits.** | Removed when the queue empties                           |
+| `localStorage`   | `foreman:announcement:<id>:<user id>`     | `{ popupSeen, dismissed }` for a "What's new" announcement. No content                                                | Until cleared                                            |
 | `sessionStorage` | `foreman:verify-email`                    | The email address just used to register, to prefill "resend verification"                                             | The tab's lifetime                                       |
 | IndexedDB        | none                                      | Not used                                                                                                              |                                                          |
 
@@ -589,6 +590,43 @@ Tested: `tests/db/canvas.test.ts` ("drops unknown properties and unsafe values")
   the app needs it.
 - `.env*` files are git-ignored except `.env.example`, which contains placeholders only.
 - `/api/health` reports whether Supabase is configured as a boolean and nothing else.
+
+## Foreman Assistant
+
+The Assistant is rule-based and deterministic. It sends nothing to any external service, and the production CSP
+allows no third-party origin, so a browser could not reach one either.
+
+| Concern                      | How it is handled                                                                                                                                                                                                                                                                                                                                                 |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Feature flag                 | `ASSISTANT_ENABLED`. `render.yaml` ships `"true"`; if the variable is unset the code treats it as off in production, so a deployment without it never exposes the Assistant by accident. Set `"false"` to switch it off. Checked in **every** Server Action, not only in the page, so turning it off also stops a browser that still has the code loaded.         |
+| Identity, role, board access | From the session (`getCurrentProfile`) and the database (`get_board`, `private.require_board_role`). No action accepts a user id, role or status; Zod schemas are `.strict()`, and a test sends them and expects a refusal.                                                                                                                                       |
+| Reading board content        | As the user, under RLS, only after `assistant_check_run` has confirmed membership, that a viewer is not asking to Propose a plan, and that the run limits are not used up. A refused or rate-limited request reads nothing and runs no rules. Comments contribute only `id` and `object_id`; their text is never selected.                                        |
+| Viewers                      | May Explain and Find gaps. May not Propose a plan, edit, reject or accept (checked in the database functions).                                                                                                                                                                                                                                                    |
+| Permission at apply time     | `assistant_accept_proposal` re-checks the caller's role **in the same transaction** that applies the change, and only the proposal's creator may accept it. A removed or downgraded member is refused.                                                                                                                                                            |
+| Version checks at apply time | The same transaction re-checks the target and every evidence object. Deleted or changed ⇒ `stale`; nothing is written to the board.                                                                                                                                                                                                                               |
+| Writes                       | Only through `SECURITY DEFINER` functions (`search_path = ''`). The browser has `SELECT` on the two tables and nothing else. No service-role key is used.                                                                                                                                                                                                         |
+| What is stored               | Ids, versions, rule ids, confidence, severity, a title and explanation written by the rules, **short excerpts (80 characters from the rules, 120 at most in the database)** and the proposed object. Proposed text is capped at 200 characters and styled only with whitelisted properties.                                                                       |
+| What is never logged         | Note text, comment text, drawing data, e-mail addresses, guidance or full boards. `telemetry.ts` can only emit `requestId`, `action`, `contextKind`, `findings` (a count), `outcome`, `code` and `durationMs`. A test feeds hostile text through the actions and the failure paths and asserts none of it appears in the logs.                                    |
+| Rate limits                  | 30 runs per hour per user and 10 per 10 minutes per user and board, checked before any content is read (`assistant_check_run`, read-only) and counted when findings are stored (`assistant_create_run`); 60 accepts per hour. Keyed by the session user, so changing the board, action, context or guidance does not reset them. Stored in `private.rate_limits`. |
+| Output encoding              | Excerpts, titles and proposed text are rendered as React text nodes; a test puts `<img onerror>` in a note and checks nothing is created or executed.                                                                                                                                                                                                             |
+| Scope of what it can do      | A proposal can only **create** one sticky note, text, rectangle, circle or arrow. There are no update, delete, owner, due-date or notification proposals, so accepting one can never overwrite or remove anyone's work.                                                                                                                                           |
+
+Audit trail: `assistant_proposal_events` is append-only (a trigger refuses updates), clients have `SELECT` only,
+`seq` is `GENERATED ALWAYS`, the event writer is a private function no client can execute, and `actor_id` always
+comes from the session. `accepted`, `applied` and `marked_stale` are written only by `assistant_accept_proposal`
+from real state, so they cannot be forged.
+
+**Known boundary.** `generated` means "`assistant_create_run` stored these findings", not "the rule engine
+produced them". A signed-in member can call `assistant_create_run` directly with findings they wrote. Such a
+proposal is attributed to them, validated like any other, visible to members like any other, can only add one
+object they could already add with `submit_operation`, and only they can accept it. So it grants no new power,
+but the trail cannot prove a finding came from the rules. Closing that would need the database to verify a
+server-signed payload (a signing key shared by the app and the database) or to run the rules itself.
+
+Known limits: excerpts are user content stored in the database (as is everything else on a board), and they are
+visible to the same members who can see the board. Findings are heuristics: a high confidence is a statement about
+the rule, not about the facts. A person who can edit the board can still accept a bad suggestion; the preview, the
+evidence and per-proposal undo are there for that.
 
 ## Logging and security events
 

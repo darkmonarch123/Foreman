@@ -63,6 +63,7 @@ function Harness() {
       initialMembers={loaded.members}
       currentUser={loaded.user}
       services={services}
+      initialAssistantOpen={params.get("assistant") === "open"}
     />
   );
 }

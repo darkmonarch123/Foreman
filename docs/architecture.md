@@ -496,6 +496,68 @@ Undo is implemented in `BoardEngine` as compensating operations. The operation l
 `BOARD_NOT_FOUND` deliberately has the message "Board not found or access is unavailable." so that a missing
 board and a forbidden one read the same.
 
+## Foreman Assistant
+
+A deterministic, rule-based planning helper behind the `assistant_enabled` flag. It makes **no external call**: the
+rules run in the Server Action process on rows the caller's own session can already read.
+
+```
+panel (client)  ──Server Action──▶  actions.ts  ──┬─ flag, session, Zod
+ AssistantServices                                 ├─ assistant_check_run: member? viewer+Propose? limits? (counts nothing)
+                                                   ├─ SELECT canvas_objects / board_comments(id, object_id) as the user
+                                                   ├─ analyze()  ← pure rule engine, no I/O
+                                                   └─ assistant_create_run (stores findings, rate limited)
+accept ─▶ assistant_accept_proposal (one transaction, row locked)
+              permission → still pending → target + evidence versions → public.submit_operation → audit events
+```
+
+### Modules (`src/lib/assistant`)
+
+| File                        | Role                                                                                                |
+| --------------------------- | --------------------------------------------------------------------------------------------------- |
+| `types.ts`, `schemas.ts`    | Shared types, constants and the Zod schemas for everything crossing the Server Action boundary.     |
+| `text.ts`, `geometry.ts`    | Tokenising and Jaccard similarity; boxes, overlap, gaps, free-space search.                         |
+| `context.ts`                | Builds the read-only view of the board the rules use (notes, arrows, themes, evidence).             |
+| `rules.ts`                  | The eight rules. Pure functions: same board in, same findings out.                                  |
+| `explain.ts`, `guidance.ts` | "Explain this board" and the "leave out X" guidance parser.                                         |
+| `analyze.ts`                | Applies guidance and context, drops findings under 0.5 confidence, sorts, caps at 10, places notes. |
+| `actions.ts`                | Server Actions. Flag, session, validation, then the database functions.                             |
+| `client-services.ts`        | `AssistantServices` over the Server Actions; the board UI depends only on that interface.           |
+| `flag.ts`, `telemetry.ts`   | The flag, and a logger with no field that can carry content.                                        |
+
+Nothing in `analyze` and below imports React, Supabase or Next, so the same code runs in the Server Action, the unit
+tests and the in-memory test backend (`tests/support/memory-assistant.ts`).
+
+### Why acceptance happens in the database
+
+An accepted proposal is applied by `assistant_accept_proposal`, which calls `public.submit_operation`: the same
+function the board UI uses. So it is rate limited, role checked, sequenced, logged to activity and broadcast like
+any edit. The proposal row is locked, so two accepts cannot both apply it, and the operation and object ids are
+derived from the proposal id (`md5('assistant:' || id)`), so a retry returns the original result.
+
+The browser that accepted then calls `BoardEngine.adoptServerCreate(operation)`. That puts the server's operation
+into local state and into undo history, without queueing or re-sending it. Undo and redo are the engine's normal
+compensating operations (`OBJECT_DELETED` / `OBJECT_RESTORED`), and `BoardEngine.undoObject(id)` undoes one
+proposal's object without disturbing the rest of the history.
+
+### Staleness
+
+A finding stores the version of each object it cites (evidence) and of the object it targets. Accept refuses with
+`stale` if any is deleted or at another version. The browser also compares against its live board so the card says
+so before anyone clicks, but that is only a hint: the database check is the one that counts.
+
+### Preview
+
+"Preview on board" draws a dimmed, dashed ghost from the proposal's own data. It is component state in the
+workspace: never stored, sent, put in the operation log or added to undo history. Closing the panel clears it.
+
+### Statuses
+
+`pending` → `accepted` / `edited_accepted` / `rejected` / `stale` / `expired` (7 days, or replaced by a newer run).
+There is no separate "applied" status: a proposal is applied when it is `accepted` or `edited_accepted` and has an
+`applied_operation_id`. Events (`generated`, `viewed`, `edited`, `accepted`, `rejected`, `marked_stale`,
+`apply_failed`, `applied`) are append-only in `assistant_proposal_events`.
+
 ## Design decisions and trade-offs
 
 ### Writes go through database functions

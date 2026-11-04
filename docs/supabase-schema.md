@@ -69,25 +69,27 @@ Postgres enum types); every table has RLS enabled.
 
 ### Summary
 
-| Table                 | Purpose                                                                   |
-| --------------------- | ------------------------------------------------------------------------- |
-| `profiles`            | One row per `auth.users` row, created by trigger at sign-up.              |
-| `templates`           | Starter template catalog (seeded).                                        |
-| `boards`              | A board, its owner, access mode and current operation sequence.           |
-| `board_sharing`       | Collaboration code and share-link hash, kept apart from `boards`.         |
-| `board_members`       | Who is on a board and with which role.                                    |
-| `board_invitations`   | Email invitations.                                                        |
-| `board_join_requests` | Requests to join made with a code or link on a request-access board.      |
-| `canvas_objects`      | Current state of each object on a board.                                  |
-| `board_operations`    | Append-only log of accepted canvas operations.                            |
-| `board_snapshots`     | Periodic full copies of a board's live objects.                           |
-| `board_comments`      | Comments, optionally anchored to an object.                               |
-| `board_activity`      | Activity feed entries, written only by database functions.                |
-| `security_events`     | Security log. Not readable through the API.                               |
-| `cookie_consents`     | Append-only record of consent choices.                                    |
-| `uploaded_files`      | Metadata contract for image uploads. **Unused: nothing inserts into it.** |
-| `private.rate_limits` | One counter per user and action.                                          |
-| `private.settings`    | `snapshot_interval` (50) and `invitation_ttl_days` (7).                   |
+| Table                       | Purpose                                                                   |
+| --------------------------- | ------------------------------------------------------------------------- |
+| `profiles`                  | One row per `auth.users` row, created by trigger at sign-up.              |
+| `templates`                 | Starter template catalog (seeded).                                        |
+| `boards`                    | A board, its owner, access mode and current operation sequence.           |
+| `board_sharing`             | Collaboration code and share-link hash, kept apart from `boards`.         |
+| `board_members`             | Who is on a board and with which role.                                    |
+| `board_invitations`         | Email invitations.                                                        |
+| `board_join_requests`       | Requests to join made with a code or link on a request-access board.      |
+| `canvas_objects`            | Current state of each object on a board.                                  |
+| `board_operations`          | Append-only log of accepted canvas operations.                            |
+| `board_snapshots`           | Periodic full copies of a board's live objects.                           |
+| `board_comments`            | Comments, optionally anchored to an object.                               |
+| `board_activity`            | Activity feed entries, written only by database functions.                |
+| `security_events`           | Security log. Not readable through the API.                               |
+| `cookie_consents`           | Append-only record of consent choices.                                    |
+| `uploaded_files`            | Metadata contract for image uploads. **Unused: nothing inserts into it.** |
+| `assistant_proposals`       | Foreman Assistant findings and their proposals. Select only; see below.   |
+| `assistant_proposal_events` | Append-only audit trail for each proposal.                                |
+| `private.rate_limits`       | One counter per user and action.                                          |
+| `private.settings`          | `snapshot_interval` (50) and `invitation_ttl_days` (7).                   |
 
 ### `profiles`
 
@@ -247,6 +249,39 @@ FK), `metadata` (JSON object), `created_at` (default `clock_timestamp()`). Index
 `board_id` (FK cascade), `uploader_id` (FK `set null`), `mime_type` (`image/png`, `image/jpeg`, `image/webp`),
 `size_bytes` (1 to 5,242,880), `width` and `height` (1 to 4096), `storage_key` (unique UUID). Index `(board_id)`.
 There is no function, policy or grant that allows a row to be written. Image upload is not implemented.
+
+### `assistant_proposals` and `assistant_proposal_events`
+
+Added by `20261008000900_foreman_assistant.sql`. **Existing projects must run that file separately.**
+
+`assistant_proposals`: `id`, `board_id`, `created_by`, `context_kind` (`board`/`object`) and `context_object_id`,
+`action`, `guidance` (≤ 300), `status` (`pending`, `accepted`, `edited_accepted`, `rejected`, `stale`, `expired`),
+`rule_id`, `title`, `explanation`, `label` (`fact`/`inference`/`suggestion`), `severity`, `confidence` (0–1),
+`evidence` (≤ 10 `{object_id, version, excerpt}`), `proposal` and `edited_proposal` (`create_object` only),
+`target_object_id` + `target_object_version`, `created_at`, `resolved_at`, `applied_operation_id`. Checks tie the
+object context and target to their pair, and allow `applied_operation_id` only on an accepted proposal.
+
+`assistant_proposal_events`: `id`, `seq` (`GENERATED ALWAYS` identity, strict order), `proposal_id`, `board_id`,
+`actor_id`, `event` (`generated`, `viewed`, `edited`, `accepted`, `rejected`, `marked_stale`, `apply_failed`,
+`applied`), `details`, `created_at` (`clock_timestamp()`). A trigger refuses every update.
+
+Both tables have RLS on with a select policy for board members (`private.is_board_member`); all privileges are
+revoked and `SELECT` is granted back, so the browser cannot write. Functions (all `SECURITY DEFINER`,
+`search_path = ''`, execute for `authenticated`):
+
+| Function                    | Purpose                                                                                                        |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `assistant_check_run`       | Read-only pre-flight: membership, viewer rules and run limits, before the app reads the board. Counts nothing. |
+| `assistant_create_run`      | Validates and stores findings; expires the caller's older pending ones; counts the run.                        |
+| `assistant_list_proposals`  | The caller's own proposals for a board; marks stale or expired ones as it reads.                               |
+| `assistant_mark_viewed`     | Records `viewed` once.                                                                                         |
+| `assistant_edit_proposal`   | Owner/editor, creator only, pending only. Validated like a new proposal.                                       |
+| `assistant_reject_proposal` | Owner/editor, creator only.                                                                                    |
+| `assistant_accept_proposal` | One transaction: role, creator, pending, expiry, versions, `submit_operation`, audit events. Idempotent.       |
+
+Private helpers (`assistant_log_event`, `assistant_derived_uuid`, `assistant_clean_*`, `assistant_stale_reason`,
+`assistant_limit_reached`, …) are not executable by clients. Rate limits: `assistant_run` 30/hour and
+`assistant_run:<board>` 10 per 10 minutes; `assistant_accept` 60/hour.
 
 ### `private.rate_limits` and `private.settings`
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, Download, PanelRight, Redo2, Settings, Share2, Undo2 } from "lucide-react";
+import { ArrowLeft, Download, PanelRight, Redo2, Settings, Share2, Sparkles, Undo2 } from "lucide-react";
 import Link from "next/link";
 import { useRef, useState } from "react";
 import { ProfileMenu } from "@/components/app/profile-menu";
@@ -28,6 +28,9 @@ interface BoardTopBarProps {
   onExport: () => void;
   onTogglePanel: () => void;
   panelOpen: boolean;
+  assistantAvailable?: boolean;
+  assistantOpen?: boolean;
+  onToggleAssistant?: () => void;
   currentUser: { first_name: string; last_name: string; username: string; avatar_url: string };
 }
 
@@ -47,6 +50,9 @@ export function BoardTopBar({
   onExport,
   onTogglePanel,
   panelOpen,
+  assistantAvailable = false,
+  assistantOpen = false,
+  onToggleAssistant,
   currentUser,
 }: BoardTopBarProps) {
   const isOwner = role === "OWNER";
@@ -214,6 +220,22 @@ export function BoardTopBar({
           <span className="hidden sm:inline">Export</span>
           <span className="sm:hidden sr-only">Export</span>
         </Button>
+        {assistantAvailable ? (
+          <Tooltip label="Foreman Assistant" shortcut="F" side="bottom">
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={onToggleAssistant}
+              aria-pressed={assistantOpen}
+              aria-keyshortcuts="F"
+              className="h-9"
+            >
+              <Sparkles className="size-4" aria-hidden />
+              <span className="hidden sm:inline">Foreman Assistant</span>
+              <span className="sr-only sm:hidden">Foreman Assistant</span>
+            </Button>
+          </Tooltip>
+        ) : null}
         <Tooltip label={panelOpen ? "Hide panel" : "Show panel"} side="bottom">
           <IconButton label={panelOpen ? "Hide panel" : "Show panel"} aria-pressed={panelOpen} onClick={onTogglePanel}>
             <PanelRight className="size-[18px]" aria-hidden />

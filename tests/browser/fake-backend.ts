@@ -11,6 +11,7 @@ import type { BoardRole, BoardSummary, PendingOperation } from "@/lib/board/type
 import { ERROR_CATALOG, type ErrorCode } from "@/lib/errors";
 import { TEMPLATE_CATALOG } from "@/lib/templates/catalog";
 import { FakeBoardServer } from "../support/fake-board-server";
+import { MemoryAssistant } from "../support/memory-assistant";
 
 /**
  * TEST ONLY. An in-memory backend that implements the BoardServices contract
@@ -64,6 +65,7 @@ interface Client {
 export class FakeBackend {
   private server: Server | null = null;
   private board = new FakeBoardServer();
+  private assistant!: MemoryAssistant;
   private members = new Map<string, Member>();
   private comments: BoardComment[] = [];
   private activity: ActivityItem[] = [];
@@ -119,7 +121,24 @@ export class FakeBackend {
         });
       });
     }
+    this.assistant = new MemoryAssistant(
+      this.board,
+      (userId) => [...this.members.values()].find((entry) => entry.user_id === userId)?.role ?? null,
+      BOARD_ID,
+    );
     this.log("ada", "BOARD_CREATED");
+  }
+
+  /** Runs one Assistant call as `key`, translating its errors to the backend's error type. */
+  private assistantCall<T>(key: string, call: (userId: string) => T): T {
+    const me = this.members.get(key);
+    if (!me) throw new HttpError("BOARD_NOT_FOUND");
+    try {
+      return call(me.user_id);
+    } catch (error) {
+      const code = (error as { code?: ErrorCode } | null)?.code;
+      throw new HttpError(code ?? "UNKNOWN");
+    }
   }
 
   private uuid(): string {
@@ -351,6 +370,34 @@ export class FakeBackend {
         this.members.delete(entry[0]);
         return null;
       }
+      case "assistant.run":
+        return this.assistantCall(key, (userId) =>
+          this.assistant.run(userId, args as unknown as Parameters<MemoryAssistant["run"]>[1]),
+        );
+      case "assistant.list":
+        return this.assistantCall(key, (userId) => this.assistant.list(userId));
+      case "assistant.markViewed":
+        return this.assistantCall(key, (userId) =>
+          this.assistant.servicesFor(userId).markViewed(String(args.proposalId)),
+        );
+      case "assistant.edit":
+        return this.assistantCall(key, (userId) =>
+          this.assistant.edit(userId, String(args.proposalId), args.proposal as Parameters<MemoryAssistant["edit"]>[2]),
+        );
+      case "assistant.reject":
+        return this.assistantCall(key, (userId) => this.assistant.reject(userId, String(args.proposalId)));
+      case "assistant.accept": {
+        const result = this.assistantCall(key, (userId) => this.assistant.accept(userId, String(args.proposalId)));
+        if (result.status === "applied") {
+          // Same as any other accepted operation: broadcast it and record it in the activity feed.
+          if (!this.dropOperationEvents) this.emit("operation", result.operation);
+          this.log(key, "OBJECT_CREATED", {
+            object_id: result.operation.object_id,
+            metadata: { object_type: result.operation.object.type },
+          });
+        }
+        return result;
+      }
       case "transferOwnership":
         throw new HttpError("UNKNOWN");
       default:
@@ -370,6 +417,47 @@ export class FakeBackend {
       case "drop-operation-events":
         this.dropOperationEvents = body.drop === true;
         return null;
+      case "edit-object": {
+        // Someone else edits an item directly on the server (as Ben), to make proposals stale.
+        const ben = this.members.get("ben")!;
+        const id = String(body.id ?? [...this.board.objects.values()].find((o) => o.props.text === body.match)?.id);
+        const current = this.board.objects.get(id);
+        if (!current) throw new HttpError("OBJECT_NOT_FOUND");
+        const operation = body.delete
+          ? { type: "OBJECT_DELETED" as const, payload: {} }
+          : { type: "OBJECT_UPDATED" as const, payload: { props: { text: String(body.text) } } };
+        this.board.apply(ben.user_id, {
+          operation_id: this.uuid(),
+          object_id: id,
+          expected_version: current.version,
+          client_timestamp: new Date(0).toISOString(),
+          ...operation,
+        });
+        if (!this.dropOperationEvents) this.emit("operation", this.board.log[this.board.log.length - 1]);
+        return null;
+      }
+      case "add-object": {
+        const id = this.uuid();
+        this.board.apply(PEOPLE.ada.user_id, {
+          operation_id: this.uuid(),
+          type: "OBJECT_CREATED",
+          object_id: id,
+          payload: {
+            type: (body.type as "STICKY_NOTE") ?? "STICKY_NOTE",
+            x: Number(body.x ?? 0),
+            y: Number(body.y ?? 0),
+            width: Number(body.width ?? 180),
+            height: Number(body.height ?? 140),
+            props: { text: String(body.text ?? "") },
+          },
+          expected_version: null,
+          client_timestamp: new Date(0).toISOString(),
+        });
+        this.emit("operation", this.board.log[this.board.log.length - 1]);
+        return id;
+      }
+      case "assistant-events":
+        return this.assistant.events;
       case "state":
         return {
           objects: [...this.board.objects.values()],

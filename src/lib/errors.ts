@@ -51,6 +51,10 @@ export const ERROR_CATALOG = {
   COMMENT_NOT_FOUND: { status: 404, message: "That comment is no longer available." },
   COMMENTING_DISABLED: { status: 403, message: "Viewers can't comment on this board." },
 
+  ASSISTANT_DISABLED: { status: 403, message: "Foreman Assistant isn't turned on for this site." },
+  PROPOSAL_NOT_FOUND: { status: 404, message: "That suggestion is no longer available." },
+  PROPOSAL_NOT_PENDING: { status: 409, message: "That suggestion has already been handled." },
+
   USERNAME_TAKEN: { status: 409, message: "That username is taken. Try another." },
   CONFIRMATION_MISMATCH: { status: 422, message: "Type the confirmation phrase exactly as shown." },
   OWNED_BOARDS_REQUIRE_TRANSFER: {

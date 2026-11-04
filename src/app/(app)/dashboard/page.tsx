@@ -2,9 +2,12 @@ import { FolderOpen, Inbox, LayoutTemplate, Plus, Search, Trash2, TriangleAlert 
 import type { Metadata } from "next";
 import { Suspense, type ReactNode } from "react";
 import { BoardCard } from "@/components/app/board-card";
+import { WhatsNewAnnouncement } from "@/components/app/whats-new-announcement";
 import { LinkButton } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { LoadingRegion, Skeleton } from "@/components/ui/skeleton";
+import { ASSISTANT_ANNOUNCEMENT, shouldAnnounceAssistant } from "@/lib/announcements";
+import { isAssistantEnabled } from "@/lib/assistant/flag";
 import { requireProfile } from "@/lib/auth/dal";
 import { listBoards } from "@/lib/boards/data";
 import type { BoardListItem, BoardScope } from "@/lib/boards/types";
@@ -170,6 +173,11 @@ async function DashboardContent({ searchParams }: { searchParams: Search }) {
     );
   }
 
+  // Only announce the Assistant while it is switched on, and only during its 30-day window.
+  const announcement = shouldAnnounceAssistant(isAssistantEnabled()) ? (
+    <WhatsNewAnnouncement announcement={ASSISTANT_ANNOUNCEMENT} userId={profile.id} learnMoreHref="/whats-new" />
+  ) : null;
+
   const mine = boards.filter((board) => board.role === "OWNER");
   const shared = boards.filter((board) => board.role !== "OWNER");
 
@@ -177,6 +185,7 @@ async function DashboardContent({ searchParams }: { searchParams: Search }) {
     return (
       <>
         <PageHeader title={`Hello, ${profile.first_name}`} />
+        {announcement}
         <EmptyState
           icon={<FolderOpen className="size-6" />}
           title="You don’t have any boards yet"
@@ -200,6 +209,7 @@ async function DashboardContent({ searchParams }: { searchParams: Search }) {
   return (
     <>
       <PageHeader title={`Hello, ${profile.first_name}`} />
+      {announcement}
       <Section title="Recent boards">
         <BoardGrid boards={boards.slice(0, 4)} />
       </Section>

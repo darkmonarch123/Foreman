@@ -8,6 +8,7 @@ import {
   MessageSquare,
   Redo2,
   Share2,
+  Sparkles,
   TriangleAlert,
   Undo2,
   Users,
@@ -18,8 +19,9 @@ import type { SyncStatus } from "@/components/ui/badge";
 import { Button, LinkButton } from "@/components/ui/button";
 import { ContextMenu, type MenuItem } from "@/components/ui/menu";
 import { useToast } from "@/components/ui/toast";
+import { ASSISTANT_ACTION_LABELS, type AssistantAction, type ProposalDraft } from "@/lib/assistant/types";
 import { BOARD_SETTINGS_ACTIVITY, MEMBERSHIP_ACTIVITY, colorForUser } from "@/lib/board/activity-text";
-import { TYPE_LABELS, supportsText } from "@/lib/board/defaults";
+import { TYPE_LABELS, describeObject, supportsText } from "@/lib/board/defaults";
 import { BoardEngine, type EngineNotice } from "@/lib/board/engine";
 import { contentBounds, fitCamera, screenToWorld, zoomAt, type Camera, type Point } from "@/lib/board/geometry";
 import {
@@ -34,6 +36,7 @@ import { createLocalPendingStore, type PendingStore } from "@/lib/board/storage"
 import { TOOLS, isTypingTarget, toolForKey, type Tool } from "@/lib/board/tools";
 import type { BoardState, BoardSummary, CanvasProps } from "@/lib/board/types";
 import { ERROR_CATALOG, errorMessage, toAppError } from "@/lib/errors";
+import { AssistantPanel, type AssistantIntent } from "./assistant-panel";
 import { BoardTopBar } from "./board-top-bar";
 import { CanvasStage, type RemoteCursor } from "./canvas-stage";
 import { CommandPalette, type Command } from "./command-palette";
@@ -60,6 +63,8 @@ interface BoardWorkspaceProps {
   services: BoardServices;
   /** Overridable for tests; defaults to localStorage scoped to this user and board. */
   pendingStore?: PendingStore;
+  /** Open the Assistant panel on arrival, when the Assistant is available. */
+  initialAssistantOpen?: boolean;
 }
 
 interface Paged<T> {
@@ -72,7 +77,14 @@ interface Paged<T> {
 const EMPTY_PAGE = { items: null, error: null, hasMore: false, loadingMore: false };
 const CURSOR_TTL_MS = 8_000;
 
-export function BoardWorkspace({ initial, initialMembers, currentUser, services, pendingStore }: BoardWorkspaceProps) {
+export function BoardWorkspace({
+  initial,
+  initialMembers,
+  currentUser,
+  services,
+  pendingStore,
+  initialAssistantOpen = false,
+}: BoardWorkspaceProps) {
   const router = useRouter();
   const toast = useToast();
   const boardId = initial.board.id;
@@ -129,6 +141,18 @@ export function BoardWorkspace({ initial, initialMembers, currentUser, services,
   const [contextMenu, setContextMenu] = useState<{ id: string | null; at: Point } | null>(null);
   const [commentTargetId, setCommentTargetId] = useState<string | null>(null);
   const [announcement, setAnnouncement] = useState("");
+  const assistant = services.assistant ?? null;
+  const [assistantOpen, setAssistantOpen] = useState(() => initialAssistantOpen && Boolean(assistant));
+
+  // `?assistant=open` has done its job once the panel is open; drop it so a reload doesn't reopen it.
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    if (url.searchParams.get("assistant") !== "open") return;
+    url.searchParams.delete("assistant");
+    window.history.replaceState(window.history.state, "", url.pathname + url.search + url.hash);
+  }, []);
+  const [assistantIntent, setAssistantIntent] = useState<AssistantIntent | null>(null);
+  const [ghostDraft, setGhostDraft] = useState<ProposalDraft | null>(null);
   const [online, setOnline] = useState(true);
   const [realtimeConnected, setRealtimeConnected] = useState(false);
 
@@ -402,6 +426,38 @@ export function BoardWorkspace({ initial, initialMembers, currentUser, services,
     requestAnimationFrame(() => document.getElementById("new-comment")?.focus());
   }, []);
 
+  const openAssistant = useCallback(
+    (request?: { action: AssistantAction; context: "board" | "object" }) => {
+      if (!assistant) return;
+      setAssistantOpen(true);
+      if (request) setAssistantIntent({ nonce: Date.now() + Math.random(), ...request });
+    },
+    [assistant],
+  );
+
+  const closeAssistant = useCallback(() => {
+    setAssistantOpen(false);
+    setGhostDraft(null);
+  }, []);
+
+  const previewAssistant = useCallback(
+    (draft: ProposalDraft | null) => {
+      setGhostDraft(draft);
+      if (!draft) return;
+      // Bring the preview into view; the camera is left alone when it is already visible.
+      setCamera((current) => {
+        const { x, y, width, height } = draft.object;
+        const visibleW = viewport.width / current.zoom;
+        const visibleH = viewport.height / current.zoom;
+        const inView =
+          x >= current.x && y >= current.y && x + width <= current.x + visibleW && y + height <= current.y + visibleH;
+        if (inView || viewport.width === 0) return current;
+        return { zoom: current.zoom, x: x + width / 2 - visibleW / 2, y: y + height / 2 - visibleH / 2 };
+      });
+    },
+    [viewport],
+  );
+
   const changeTool = useCallback(
     (next: Tool) => {
       const definition = TOOLS.find((entry) => entry.id === next);
@@ -477,6 +533,11 @@ export function BoardWorkspace({ initial, initialMembers, currentUser, services,
           key === "ArrowLeft" ? -step : key === "ArrowRight" ? step : 0,
           key === "ArrowUp" ? -step : key === "ArrowDown" ? step : 0,
         );
+      } else if (key.toLowerCase() === "f" && assistant) {
+        // Never while typing (handled above); toggles the Assistant panel.
+        event.preventDefault();
+        if (assistantOpen) closeAssistant();
+        else openAssistant();
       } else if (key.length === 1) {
         const next = toolForKey(key);
         if (next) changeTool(next);
@@ -497,6 +558,10 @@ export function BoardWorkspace({ initial, initialMembers, currentUser, services,
     zoomTo,
     zoomToFit,
     changeTool,
+    assistant,
+    assistantOpen,
+    openAssistant,
+    closeAssistant,
   ]);
 
   // -- derived data -------------------------------------------------------------------------------
@@ -527,6 +592,21 @@ export function BoardWorkspace({ initial, initialMembers, currentUser, services,
   const contextItems: MenuItem[] = useMemo(() => {
     const id = contextMenu?.id ?? null;
     const target = id ? snapshot.byId.get(id) : null;
+    const assistantItems = (scope: "board" | "object"): MenuItem[] =>
+      !assistant
+        ? []
+        : (["explain_board", "find_planning_gaps", "propose_plan"] as const)
+            .filter((action) => canEdit || action !== "propose_plan")
+            .map((action, index) => ({
+              id: `assistant-${action}`,
+              label: ASSISTANT_ACTION_LABELS[action].label,
+              icon: index === 0 ? <Sparkles /> : undefined,
+              separated: index === 0,
+              onSelect: () => {
+                if (scope === "object" && target) setSelectedId(target.id);
+                openAssistant({ action, context: scope });
+              },
+            }));
     if (!target) {
       return [
         { id: "fit", label: "Zoom to fit", icon: <Maximize />, onSelect: zoomToFit },
@@ -541,6 +621,7 @@ export function BoardWorkspace({ initial, initialMembers, currentUser, services,
             ]
           : []),
         { id: "export", label: "Export as PNG", icon: <Download />, onSelect: () => setDialog("export") },
+        ...assistantItems("board"),
       ];
     }
     return [
@@ -556,6 +637,7 @@ export function BoardWorkspace({ initial, initialMembers, currentUser, services,
       ...(canComment
         ? [{ id: "comment", label: "Comment on this item", onSelect: () => openComments(target.id) }]
         : []),
+      ...assistantItems("object"),
       ...(canEdit
         ? [
             {
@@ -569,7 +651,19 @@ export function BoardWorkspace({ initial, initialMembers, currentUser, services,
           ]
         : []),
     ];
-  }, [contextMenu, snapshot.byId, canEdit, canComment, zoomToFit, openComments, duplicate, bringToFront, removeObject]);
+  }, [
+    contextMenu,
+    snapshot.byId,
+    canEdit,
+    canComment,
+    assistant,
+    zoomToFit,
+    openComments,
+    duplicate,
+    bringToFront,
+    removeObject,
+    openAssistant,
+  ]);
 
   const commands: Command[] = useMemo(
     () => [
@@ -583,6 +677,17 @@ export function BoardWorkspace({ initial, initialMembers, currentUser, services,
       { id: "undo", label: "Undo", icon: <Undo2 />, run: () => void engine.undo(), disabled: !snapshot.canUndo },
       { id: "redo", label: "Redo", icon: <Redo2 />, run: () => void engine.redo(), disabled: !snapshot.canRedo },
       { id: "fit", label: "Zoom to fit", icon: <Maximize />, run: zoomToFit },
+      ...(assistant
+        ? [
+            {
+              id: "assistant",
+              label: "Open Foreman Assistant",
+              icon: <Sparkles />,
+              hint: "F",
+              run: () => openAssistant(),
+            },
+          ]
+        : []),
       { id: "export", label: "Export as PNG", icon: <Download />, run: () => setDialog("export") },
       {
         id: "share",
@@ -634,7 +739,18 @@ export function BoardWorkspace({ initial, initialMembers, currentUser, services,
       },
       { id: "dashboard", label: "Go to dashboard", icon: <LayoutDashboard />, run: () => router.push("/dashboard") },
     ],
-    [canEdit, role, engine, snapshot.canUndo, snapshot.canRedo, zoomToFit, changeTool, router],
+    [
+      canEdit,
+      role,
+      engine,
+      snapshot.canUndo,
+      snapshot.canRedo,
+      zoomToFit,
+      changeTool,
+      router,
+      assistant,
+      openAssistant,
+    ],
   );
 
   // -- access lost ----------------------------------------------------------------------------------
@@ -677,6 +793,9 @@ export function BoardWorkspace({ initial, initialMembers, currentUser, services,
         onExport={() => setDialog("export")}
         onTogglePanel={() => setPanelOpen((value) => !value)}
         panelOpen={panelOpen}
+        assistantAvailable={Boolean(assistant)}
+        assistantOpen={assistantOpen}
+        onToggleAssistant={() => (assistantOpen ? closeAssistant() : openAssistant())}
         currentUser={currentUser}
       />
 
@@ -704,6 +823,7 @@ export function BoardWorkspace({ initial, initialMembers, currentUser, services,
             onCommentTarget={(id) => {
               if (canComment) openComments(id);
             }}
+            ghost={ghostDraft ? { ...ghostDraft.object } : null}
           />
 
           {/* Blocking sync failure: stays on screen until resolved, so unsaved work is never silently lost. */}
@@ -755,6 +875,9 @@ export function BoardWorkspace({ initial, initialMembers, currentUser, services,
                   onDelete={() => removeObject(selectedVisible.id)}
                   onComment={() => openComments(selectedVisible.id)}
                   canComment={canComment}
+                  onAskForeman={
+                    assistant ? () => openAssistant({ action: "explain_board", context: "object" }) : undefined
+                  }
                 />
               </div>
             </div>
@@ -804,7 +927,27 @@ export function BoardWorkspace({ initial, initialMembers, currentUser, services,
           ) : null}
         </main>
 
-        {panelOpen ? (
+        {assistant && assistantOpen ? (
+          <div className="absolute inset-y-0 right-0 z-20 shadow-lift md:static md:shadow-none">
+            <AssistantPanel
+              services={assistant}
+              canEdit={canEdit}
+              online={online}
+              objectsById={snapshot.byId}
+              selected={selectedVisible ? { id: selectedVisible.id, label: describeObject(selectedVisible) } : null}
+              intent={assistantIntent}
+              onClose={closeAssistant}
+              onPreview={previewAssistant}
+              onFocusObject={focusObject}
+              onApplied={(operation) => {
+                setGhostDraft(null);
+                engine.adoptServerCreate(operation);
+              }}
+              onUndoApplied={(objectId) => engine.undoObject(objectId)}
+              onAnnounce={setAnnouncement}
+            />
+          </div>
+        ) : panelOpen ? (
           <div className="absolute inset-y-0 right-0 z-20 shadow-lift md:static md:shadow-none">
             <SidePanel
               tab={panelTab}
