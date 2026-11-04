@@ -69,17 +69,36 @@ function fail(scope: string, requestId: string | undefined, error: unknown): Act
 
 // -- analysis ----------------------------------------------------------------
 
-const OBJECT_COLUMNS =
-  "id, type, x, y, width, height, rotation, z_index, props, version, created_by, updated_by, updated_at";
-const MAX_OBJECTS = 5000;
-const MAX_COMMENTS = 2000;
-
-interface ObjectRow extends Omit<CanvasObject, "deleted" | "z_index"> {
+/** What assistant_board_snapshot returns for each live object: geometry, version and text only. */
+interface SnapshotObject {
+  id: string;
+  type: CanvasObject["type"];
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  rotation: number;
   z_index: number | string;
+  version: number;
+  props: { text?: string };
 }
 
-function toCanvasObject(row: ObjectRow): CanvasObject {
-  return { ...row, z_index: Number(row.z_index), props: row.props ?? {}, deleted: false };
+interface BoardSnapshot {
+  role: "OWNER" | "EDITOR" | "VIEWER";
+  objects: SnapshotObject[];
+  comments: { id: string; object_id: string | null }[];
+}
+
+function toCanvasObject(row: SnapshotObject): CanvasObject {
+  return {
+    ...row,
+    z_index: Number(row.z_index),
+    props: row.props ?? {},
+    deleted: false,
+    created_by: null,
+    updated_by: null,
+    updated_at: "",
+  };
 }
 
 export async function runAssistantAnalysis(input: unknown): Promise<ActionResult<AssistantRunResult>> {
@@ -94,33 +113,16 @@ export async function runAssistantAnalysis(input: unknown): Promise<ActionResult
     perfContext.boardId = request.boardId;
     const { supabase } = ctx;
 
-    // Before any board content is read, the database checks membership (a non-member gets
+    // One round trip. Before reading anything, the database checks membership (a non-member gets
     // BOARD_NOT_FOUND), that a viewer is not asking to Propose a plan, and that the run limits are
-    // not already used up. So a refused or rate-limited request costs no read and no analysis.
-    // assistant_create_run checks all of this again, and counts the run, when the findings are stored.
-    await rpc<{ role: "OWNER" | "EDITOR" | "VIEWER" }>(supabase, "assistant_check_run", {
+    // not used up; a refused request reads nothing. It then returns only what the rules use: live
+    // objects' geometry, version and text (no drawing data or styles) and comment ids with their
+    // anchors (never comment text). assistant_create_run checks again, and counts the run.
+    const snapshot = await rpc<BoardSnapshot>(supabase, "assistant_board_snapshot", {
       p_board_id: request.boardId,
       p_action: request.action,
     });
-
-    // Reads run as the user, so RLS limits them to this board. Comments contribute only their
-    // ids and anchors: their text is not selected at all.
-    const objects = await supabase
-      .from("canvas_objects")
-      .select(OBJECT_COLUMNS)
-      .eq("board_id", request.boardId)
-      .is("deleted_at", null)
-      .limit(MAX_OBJECTS);
-    if (objects.error) throw toAppError(objects.error);
-    const comments = await supabase
-      .from("board_comments")
-      .select("id, object_id")
-      .eq("board_id", request.boardId)
-      .is("deleted_at", null)
-      .limit(MAX_COMMENTS);
-    if (comments.error) throw toAppError(comments.error);
-
-    const canvas = ((objects.data ?? []) as unknown as ObjectRow[]).map(toCanvasObject);
+    const canvas = snapshot.objects.map(toCanvasObject);
     const selectedId = request.context.kind === "object" ? request.context.objectId : null;
     if (selectedId && !canvas.some((object) => object.id === selectedId)) {
       throw new AppError("OBJECT_NOT_FOUND");
@@ -129,7 +131,7 @@ export async function runAssistantAnalysis(input: unknown): Promise<ActionResult
     const result = analyze({
       action: request.action,
       objects: canvas,
-      comments: (comments.data ?? []) as { id: string; object_id: string | null }[],
+      comments: snapshot.comments,
       context: request.context,
       guidance: request.guidance,
     });

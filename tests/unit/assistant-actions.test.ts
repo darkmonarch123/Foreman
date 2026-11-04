@@ -70,10 +70,16 @@ function row(text: string, id: string, x = 0) {
   return { ...object, id, deleted: undefined, z_index: String(object.z_index) };
 }
 
+/** What assistant_board_snapshot returns, built from the mock board when the rpc is called. */
+function snapshot(role: "OWNER" | "EDITOR" | "VIEWER") {
+  return () => ({ role, objects: mocks.state.objects, comments: mocks.state.comments });
+}
+
 function respondTo(handlers: Record<string, unknown>) {
   mocks.rpc.mockImplementation(async (fn: string) => {
     if (!(fn in handlers)) return { data: null, error: { message: `unexpected rpc ${fn}`, code: "XX000" } };
-    const value = handlers[fn];
+    const raw = handlers[fn];
+    const value = typeof raw === "function" ? (raw as () => unknown)() : raw;
     if (value instanceof Error) return { data: null, error: { message: value.message, code: "P0001" } };
     return { data: value, error: null };
   });
@@ -99,7 +105,7 @@ describe("the feature flag", () => {
   it("can be turned on explicitly in production", async () => {
     vi.stubEnv("NODE_ENV", "production");
     vi.stubEnv("ASSISTANT_ENABLED", "true");
-    respondTo({ assistant_check_run: { role: "OWNER" }, assistant_create_run: [] });
+    respondTo({ assistant_board_snapshot: snapshot("OWNER"), assistant_create_run: [] });
     expect(await runAssistantAnalysis(request)).toMatchObject({ ok: true });
   });
 
@@ -168,36 +174,39 @@ describe("authentication and input", () => {
 
 describe("runAssistantAnalysis", () => {
   it("does not read board content for a non-member", async () => {
-    respondTo({ assistant_check_run: new Error("BOARD_NOT_FOUND") });
+    respondTo({ assistant_board_snapshot: new Error("BOARD_NOT_FOUND") });
     expect(await runAssistantAnalysis(request)).toMatchObject({ ok: false, code: "BOARD_NOT_FOUND" });
     expect(mocks.from).not.toHaveBeenCalled();
   });
 
   it("asks the database to check role and action first, and reads nothing if a viewer asks to Propose a plan", async () => {
-    respondTo({ assistant_check_run: new Error("BOARD_ACCESS_DENIED") });
+    respondTo({ assistant_board_snapshot: new Error("BOARD_ACCESS_DENIED") });
     const result = await runAssistantAnalysis({ ...request, action: "propose_plan" });
     expect(result).toMatchObject({ ok: false, code: "BOARD_ACCESS_DENIED" });
-    expect(mocks.rpc).toHaveBeenCalledWith("assistant_check_run", { p_board_id: BOARD_ID, p_action: "propose_plan" });
+    expect(mocks.rpc).toHaveBeenCalledWith("assistant_board_snapshot", {
+      p_board_id: BOARD_ID,
+      p_action: "propose_plan",
+    });
     expect(mocks.from).not.toHaveBeenCalled();
   });
 
   it("refuses a rate-limited run before reading the board or running any rules", async () => {
     mocks.state.objects = [row("Who owns onboarding?", "44444444-4444-4444-8444-444444444444")];
-    respondTo({ assistant_check_run: new Error("RATE_LIMITED") });
+    respondTo({ assistant_board_snapshot: new Error("RATE_LIMITED") });
     expect(await runAssistantAnalysis(request)).toMatchObject({ ok: false, code: "RATE_LIMITED" });
     expect(mocks.from).not.toHaveBeenCalled();
-    expect(mocks.rpc.mock.calls.map(([fn]) => fn)).toEqual(["assistant_check_run"]);
+    expect(mocks.rpc.mock.calls.map(([fn]) => fn)).toEqual(["assistant_board_snapshot"]);
   });
 
   it("lets a viewer run Find planning gaps", async () => {
-    respondTo({ assistant_check_run: { role: "VIEWER" }, assistant_create_run: [] });
+    respondTo({ assistant_board_snapshot: snapshot("VIEWER"), assistant_create_run: [] });
     expect(await runAssistantAnalysis(request)).toMatchObject({ ok: true });
   });
 
   it("analyzes the board, stores only the finding fields, and never sends an identity", async () => {
     const id = "44444444-4444-4444-8444-444444444444";
     mocks.state.objects = [row("Who owns onboarding?", id)];
-    respondTo({ assistant_check_run: { role: "OWNER" }, assistant_create_run: [{ id: PROPOSAL_ID }] });
+    respondTo({ assistant_board_snapshot: snapshot("OWNER"), assistant_create_run: [{ id: PROPOSAL_ID }] });
 
     const result = await runAssistantAnalysis(request);
     expect(result).toMatchObject({ ok: true, data: { proposals: [{ id: PROPOSAL_ID }], truncated: false } });
@@ -231,23 +240,28 @@ describe("runAssistantAnalysis", () => {
     }
   });
 
-  it("never selects comment text", async () => {
-    respondTo({ assistant_check_run: { role: "OWNER" }, assistant_create_run: [] });
+  it("reads the board in one snapshot call (no table reads), sending only the board and action", async () => {
+    respondTo({ assistant_board_snapshot: snapshot("OWNER"), assistant_create_run: [] });
     await runAssistantAnalysis(request);
-    expect(mocks.state.selects.find((entry) => entry.table === "board_comments")?.columns).toBe("id, object_id");
+    expect(mocks.from).not.toHaveBeenCalled();
+    expect(mocks.rpc.mock.calls.map(([fn]) => fn)).toEqual(["assistant_board_snapshot", "assistant_create_run"]);
+    expect(mocks.rpc).toHaveBeenCalledWith("assistant_board_snapshot", {
+      p_board_id: BOARD_ID,
+      p_action: "find_planning_gaps",
+    });
   });
 
   it("makes no network request of its own", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch");
     mocks.state.objects = [row("Who owns onboarding?", "44444444-4444-4444-8444-444444444444")];
-    respondTo({ assistant_check_run: { role: "OWNER" }, assistant_create_run: [] });
+    respondTo({ assistant_board_snapshot: snapshot("OWNER"), assistant_create_run: [] });
     await runAssistantAnalysis(request);
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
   it("does not write note text, guidance or titles to the logs", async () => {
     mocks.state.objects = [row("Secret launch codename Falcon?", "44444444-4444-4444-8444-444444444444")];
-    respondTo({ assistant_check_run: { role: "OWNER" }, assistant_create_run: [{ id: PROPOSAL_ID }] });
+    respondTo({ assistant_board_snapshot: snapshot("OWNER"), assistant_create_run: [{ id: PROPOSAL_ID }] });
     await runAssistantAnalysis({ ...request, guidance: "do not include Zebra" });
     mocks.rpc.mockImplementation(async () => ({
       data: null,
@@ -262,7 +276,7 @@ describe("runAssistantAnalysis", () => {
   });
 
   it("refuses an object context that is not on the board", async () => {
-    respondTo({ assistant_check_run: { role: "OWNER" } });
+    respondTo({ assistant_board_snapshot: snapshot("OWNER") });
     const result = await runAssistantAnalysis({
       ...request,
       context: { kind: "object", objectId: "55555555-5555-4555-8555-555555555555" },
@@ -281,7 +295,7 @@ describe("runAssistantAnalysis", () => {
   });
 
   it("maps a rate limit from the database", async () => {
-    respondTo({ assistant_check_run: { role: "OWNER" }, assistant_create_run: new Error("RATE_LIMITED") });
+    respondTo({ assistant_board_snapshot: snapshot("OWNER"), assistant_create_run: new Error("RATE_LIMITED") });
     expect(await runAssistantAnalysis(request)).toMatchObject({ ok: false, code: "RATE_LIMITED" });
   });
 });
