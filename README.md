@@ -135,6 +135,8 @@ More in [docs/architecture.md](docs/architecture.md), [docs/supabase-schema.md](
 1. Create a Supabase project.
 2. Apply the migrations in `supabase/migrations` in filename order, either with the Supabase CLI
    (`supabase link --project-ref <ref>` then `supabase db push`) or by pasting each file into the SQL editor.
+   An existing project only needs the files it has not run yet; for the v1.1 release these are the four
+   `20261104…` files (performance, theme preference, Assistant v1.1, Assistant v1.2), in that order.
 3. **Authentication → Sign In / Providers → Email**: enable email, turn **Confirm email** on, set the minimum
    password length to 10.
 4. **Authentication → URL Configuration**: set **Site URL** to your exact origin and add these exact redirect
@@ -277,3 +279,6 @@ nonce-based CSP; server-verified presence.
 - [Deployment on Render](docs/deployment-render.md)
 - [GitHub Actions](docs/github-actions.md)
 - [Demo script](docs/demo-script.md)
+- [Performance](docs/performance.md)
+- [Design system](docs/design-system.md)
+- [Foreman Assistant v1.1 and v1.2](docs/assistant.md)

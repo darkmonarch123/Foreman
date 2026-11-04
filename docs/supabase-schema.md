@@ -30,16 +30,21 @@ by earlier ones.
 The repository contains `supabase/migrations` only; there is no `supabase/config.toml`. If your CLI version asks
 for one, run `supabase init` first. It does not touch the migrations.
 
-| File                                          | What it does                                                                                                                                                                                                                              |
-| --------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `20261008000100_schema.sql`                   | Creates the `private` schema, all tables, check constraints, foreign keys and indexes, and the two rows in `private.settings`.                                                                                                            |
-| `20261008000200_helpers_and_profiles.sql`     | Private helpers (identity, role checks, tokens, collaboration codes, rate limiting, activity log, broadcast), the triggers on `auth.users`, the `updated_at` trigger on `profiles`, the profile functions, and the Realtime topic parser. |
-| `20261008000300_boards_and_membership.sql`    | Board create/read/update/trash/purge/duplicate, sharing settings, collaboration codes, share links, `join_board`, members, invitations, join requests, notifications.                                                                     |
-| `20261008000400_canvas_comments_activity.sql` | Property sanitising, `submit_operation`, `load_board_state`, `get_operations_after`, comments, the activity feed, export logging.                                                                                                         |
-| `20261008000500_account.sql`                  | `export_my_data` and `request_account_deletion`.                                                                                                                                                                                          |
-| `20261008000600_rls_and_grants.sql`           | Enables RLS on every table, revokes all table and function privileges from the API roles, then grants `SELECT` on specific tables, creates the `SELECT` policies and grants `EXECUTE` on the callable functions.                          |
-| `20261008000700_realtime.sql`                 | Two policies on `realtime.messages` that authorise private board channels. See [Realtime](realtime.md).                                                                                                                                   |
-| `20261008000800_seed_templates.sql`           | Upserts the six starter templates. Generated; see [Template seed](#template-seed).                                                                                                                                                        |
+| File                                          | What it does                                                                                                                                                                                                                                         |
+| --------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `20261008000100_schema.sql`                   | Creates the `private` schema, all tables, check constraints, foreign keys and indexes, and the two rows in `private.settings`.                                                                                                                       |
+| `20261008000200_helpers_and_profiles.sql`     | Private helpers (identity, role checks, tokens, collaboration codes, rate limiting, activity log, broadcast), the triggers on `auth.users`, the `updated_at` trigger on `profiles`, the profile functions, and the Realtime topic parser.            |
+| `20261008000300_boards_and_membership.sql`    | Board create/read/update/trash/purge/duplicate, sharing settings, collaboration codes, share links, `join_board`, members, invitations, join requests, notifications.                                                                                |
+| `20261008000400_canvas_comments_activity.sql` | Property sanitising, `submit_operation`, `load_board_state`, `get_operations_after`, comments, the activity feed, export logging.                                                                                                                    |
+| `20261008000500_account.sql`                  | `export_my_data` and `request_account_deletion`.                                                                                                                                                                                                     |
+| `20261008000600_rls_and_grants.sql`           | Enables RLS on every table, revokes all table and function privileges from the API roles, then grants `SELECT` on specific tables, creates the `SELECT` policies and grants `EXECUTE` on the callable functions.                                     |
+| `20261008000700_realtime.sql`                 | Two policies on `realtime.messages` that authorise private board channels. See [Realtime](realtime.md).                                                                                                                                              |
+| `20261008000800_seed_templates.sql`           | Upserts the six starter templates. Generated; see [Template seed](#template-seed).                                                                                                                                                                   |
+| `20261008000900_foreman_assistant.sql`        | Foreman Assistant v1 tables and functions. See below.                                                                                                                                                                                                |
+| `20261104000100_performance.sql`              | `load_board_page` (state and members in one call), `assistant_board_snapshot` (the Assistant's pre-flight checks and board read in one call), and five indexes. See [Performance](performance.md).                                                   |
+| `20261104000200_theme_preference.sql`         | `profiles.theme_preference` (`system`/`light`/`dark`) and `set_theme_preference`, which changes only the caller's row.                                                                                                                               |
+| `20261104000300_assistant_v1_1.sql`           | Assistant v1.1: usefulness and fingerprint on proposals; feedback, hidden-rule and feedback-audit tables; feedback functions; the snapshot adds `updated_at`, the board's template and the caller's feedback summary. See [Assistant](assistant.md). |
+| `20261104000400_assistant_v1_2.sql`           | Assistant v1.2: allows the four action-extraction rule ids.                                                                                                                                                                                          |
 
 Migration 0300 calls `private.sanitize_props`, which is created in 0400. That is fine because PL/pgSQL resolves
 function references when the function runs, not when it is created, but it means 0300 is not usable on its own.
@@ -252,7 +257,8 @@ There is no function, policy or grant that allows a row to be written. Image upl
 
 ### `assistant_proposals` and `assistant_proposal_events`
 
-Added by `20261008000900_foreman_assistant.sql`. **Existing projects must run that file separately.**
+Added by `20261008000900_foreman_assistant.sql`. **Existing projects must run that file separately**, and then
+the `20261104…` files in order.
 
 `assistant_proposals`: `id`, `board_id`, `created_by`, `context_kind` (`board`/`object`) and `context_object_id`,
 `action`, `guidance` (≤ 300), `status` (`pending`, `accepted`, `edited_accepted`, `rejected`, `stale`, `expired`),
@@ -278,6 +284,20 @@ revoked and `SELECT` is granted back, so the browser cannot write. Functions (al
 | `assistant_edit_proposal`   | Owner/editor, creator only, pending only. Validated like a new proposal.                                       |
 | `assistant_reject_proposal` | Owner/editor, creator only.                                                                                    |
 | `assistant_accept_proposal` | One transaction: role, creator, pending, expiry, versions, `submit_operation`, audit events. Idempotent.       |
+
+v1.1 and later (`20261104000100`, `20261104000300`, `20261104000400`):
+
+| Function                     | Purpose                                                                                                                                                                                                |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `assistant_board_snapshot`   | The pre-flight checks of `assistant_check_run`, then live objects (geometry, version, `updated_at`, text only), comment anchors (no text), the board's template and the caller's own feedback summary. |
+| `assistant_set_feedback`     | Helpful / not helpful with optional reasons, optionally hiding that kind of finding. Creator of the finding only; any member role; audited.                                                            |
+| `assistant_clear_feedback`   | Removes the caller's feedback on a finding; audited.                                                                                                                                                   |
+| `assistant_set_rule_hidden`  | Hides or shows a kind of finding on a board for the caller; audited.                                                                                                                                   |
+| `assistant_hidden_rules_for` | The caller's hidden kinds on a board.                                                                                                                                                                  |
+
+`assistant_feedback` (one row per person per finding), `assistant_hidden_rules` (person, board, rule) and the
+append-only `assistant_feedback_events` have RLS with "own rows, while a member" select policies and no write
+grants. `assistant_feedback` 120 changes/hour per person.
 
 Private helpers (`assistant_log_event`, `assistant_derived_uuid`, `assistant_clean_*`, `assistant_stale_reason`,
 `assistant_limit_reached`, …) are not executable by clients. Rate limits: `assistant_run` 30/hour and

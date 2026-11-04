@@ -26,6 +26,10 @@ export function safeNextPath(value: string | null | undefined, fallback = "/dash
   try {
     const url = new URL(value, "http://foreman.invalid");
     if (url.origin !== "http://foreman.invalid") return fallback;
+    // Never return to a sign-in page (a loop), an auth callback or an API route.
+    if (isGuestOnlyPath(url.pathname) || matches(url.pathname, "/auth") || matches(url.pathname, "/api")) {
+      return fallback;
+    }
     return `${url.pathname}${url.search}`;
   } catch {
     return fallback;
