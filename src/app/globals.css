@@ -2,43 +2,82 @@
 
 /*
  * Foreman design tokens.
- * Every colour, radius, shadow and font used in the product is declared here
- * and exposed as a Tailwind utility (bg-warm, text-ink, rounded-card, ...).
+ *
+ * Every colour, type size, space, radius, shadow and motion value used in the product
+ * is declared here and exposed as a Tailwind utility (bg-surface, text-ink, rounded-card,
+ * min-h-touch, ease-standard, ...). Colours are theme-aware: the light values below are
+ * the defaults, and `[data-theme="dark"]` (set before first paint from the person's
+ * Light / Dark / System choice) redefines them. Without JavaScript, the operating
+ * system's preference is used.
+ *
+ * Names: the semantic tokens (canvas, surface, elevated, ink, muted, line, accent,
+ * success, warning, danger) are what new code should use. The older names (warm, black,
+ * error) remain as aliases so existing screens follow the theme too.
  */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
 @theme {
-  --color-warm: #fcfaf6;
+  /* Surfaces, from the page outward. */
+  --color-canvas: #f7f6f3;
+  --color-sunken: #efede8;
   --color-surface: #ffffff;
-  --color-ink: #121212;
-  --color-muted: #666666;
-  --color-line: #e9e5df;
-  --color-line-strong: #d6d0c6;
-  --color-sky: #a8d8f0;
+  --color-elevated: #ffffff;
+  --color-warm: var(--color-canvas);
+
+  /* Text. */
+  --color-ink: #18181b;
+  --color-muted: #5c5c66;
+
+  /* Borders. */
+  --color-line: #e6e3dd;
+  --color-line-strong: #d3cec5;
+
+  /* Brand accent: Foreman lavender. `accent` fills primary controls (with on-accent text);
+     `accent-ink` is for accent-coloured text; `accent-soft` for selected/tinted areas. */
   --color-lavender: #aeb9f4;
+  --color-accent: #5458c9;
+  --color-accent-hover: #4549b5;
+  --color-on-accent: #ffffff;
+  --color-accent-ink: #4448b0;
+  --color-accent-soft: #ecedfc;
+
+  /* State. Each has a strong value for text/icons and a soft one for backgrounds. */
+  --color-success: #1d7a4b;
+  --color-success-soft: #e5f3eb;
+  --color-warning: #8f5d0b;
+  --color-warning-soft: #fbf1da;
+  --color-danger: #b3261e;
+  --color-danger-soft: #fbe7e5;
+  --color-on-danger: #ffffff;
+  --color-danger-hover: #95201a;
+  --color-error: var(--color-danger);
+  --color-focus: #4d55e0;
+
+  /* Decorative pastels (illustrations, category tints). */
+  --color-sky: #a8d8f0;
   --color-mint: #a8ddb2;
   --color-yellow: #f8dd72;
   --color-coral: #f3a5a0;
   --color-sky-tint: #e6f3fa;
-  --color-lavender-tint: #e9ecfc;
+  --color-lavender-tint: #ecedfc;
   --color-mint-tint: #e6f5e9;
   --color-yellow-tint: #fdf5d4;
   --color-coral-tint: #fbe6e4;
-  --color-black: #111111;
-  --color-success: #268a57;
-  --color-warning: #b7791f;
-  --color-error: #c0392b;
-  --color-focus: #2563eb;
+
+  /* An inverted block (closing call to action, toasts). Dark in both themes. */
+  --color-black: #16161a;
+  --color-scrim: rgb(14 14 20 / 0.42);
+
+  /* Board canvas. `canvas-ink` is how the default ink colour is drawn, so black strokes
+     stay visible on a dark canvas; other colours are drawn exactly as chosen. */
+  --color-board: #fbfaf7;
+  --color-board-dot: #d9d3c8;
+  --color-canvas-ink: #121212;
 
   --font-sans: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
   --font-serif: "Fraunces Variable", ui-serif, Georgia, serif;
 
-  --radius-control: 0.75rem;
-  --radius-card: 1.25rem;
-  --radius-panel: 2rem;
-
-  --shadow-soft: 0 1px 2px rgb(18 18 18 / 0.04), 0 8px 24px -12px rgb(18 18 18 / 0.12);
-  --shadow-lift: 0 2px 4px rgb(18 18 18 / 0.05), 0 24px 48px -24px rgb(18 18 18 / 0.22);
-  --shadow-note: 0 1px 1px rgb(18 18 18 / 0.06), 0 6px 12px -6px rgb(18 18 18 / 0.18);
-
+  /* Type scale. */
   --text-display: clamp(2.75rem, 6.2vw, 5.25rem);
   --text-display--line-height: 1.02;
   --text-display--letter-spacing: -0.035em;
@@ -48,11 +87,128 @@
   --text-title: clamp(1.5rem, 2.2vw, 2rem);
   --text-title--line-height: 1.15;
   --text-title--letter-spacing: -0.02em;
+  --text-body: 0.9375rem;
+  --text-body--line-height: 1.55;
+  --text-label: 0.8125rem;
+  --text-label--line-height: 1.35;
 
+  /* Layout breakpoints: phone below `tablet` (744px, iPad mini portrait); the full desktop
+     board toolbar from `xl` (1280px). */
+  --breakpoint-tablet: 46.5rem;
+
+  /* Spacing beyond Tailwind's 4px scale: touch targets and the gap between them. */
+  --spacing-touch: 2.75rem;
+  --spacing-touch-gap: 0.75rem;
+  --spacing-gutter: 1rem;
+
+  /* Radius scale. */
+  --radius-chip: 0.5rem;
+  --radius-control: 0.75rem;
+  --radius-card: 1.25rem;
+  --radius-sheet: 1.5rem;
+  --radius-panel: 2rem;
+
+  /* Elevation, lowest to highest. */
+  --shadow-soft: 0 1px 2px rgb(18 18 18 / 0.04), 0 8px 24px -12px rgb(18 18 18 / 0.12);
+  --shadow-lift: 0 2px 4px rgb(18 18 18 / 0.05), 0 24px 48px -24px rgb(18 18 18 / 0.22);
+  --shadow-note: 0 1px 1px rgb(18 18 18 / 0.06), 0 6px 12px -6px rgb(18 18 18 / 0.18);
+  --shadow-sheet: 0 -8px 32px -12px rgb(18 18 18 / 0.25);
+
+  /* Motion. */
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --ease-emphasized: cubic-bezier(0.3, 0, 0, 1.15);
   --animate-toast-in: toast-in 180ms ease-out;
   --animate-pop-in: pop-in 140ms ease-out;
+  --animate-sheet-in: sheet-in 260ms var(--ease-standard);
   --animate-shimmer: shimmer 1.4s linear infinite;
   --animate-spin-slow: spin 0.9s linear infinite;
+}
+
+/*
+ * Dark theme: layered surfaces (never pure black), softened text, lavender accent
+ * lightened for contrast. Applies when the person chooses Dark, or System on a dark
+ * system; the second block covers the case where no script has run.
+ */
+[data-theme="dark"] {
+  --color-canvas: #121216;
+  --color-sunken: #0e0e12;
+  --color-surface: #1a1a20;
+  --color-elevated: #22222a;
+  --color-ink: #ececf1;
+  --color-muted: #a6a6b1;
+  --color-line: #2c2c35;
+  --color-line-strong: #3d3d48;
+  --color-accent: #a9aefa;
+  --color-accent-hover: #bbbffb;
+  --color-on-accent: #17173a;
+  --color-accent-ink: #b9bdfb;
+  --color-accent-soft: #262849;
+  --color-success: #57c891;
+  --color-success-soft: #15291f;
+  --color-warning: #e2b257;
+  --color-warning-soft: #2c2414;
+  --color-danger: #f28b82;
+  --color-danger-soft: #331b1a;
+  --color-on-danger: #2a0f0d;
+  --color-danger-hover: #f6a39c;
+  --color-focus: #a9aefa;
+  --color-sky-tint: #17262f;
+  --color-lavender-tint: #22243f;
+  --color-mint-tint: #16281d;
+  --color-yellow-tint: #2b2615;
+  --color-coral-tint: #301c1b;
+  --color-black: #0b0b0e;
+  --color-scrim: rgb(0 0 0 / 0.6);
+  --color-board: #16161b;
+  --color-board-dot: #2e2e37;
+  --color-canvas-ink: #e9e9ee;
+  --shadow-soft: 0 1px 2px rgb(0 0 0 / 0.4), 0 8px 24px -12px rgb(0 0 0 / 0.6);
+  --shadow-lift: 0 2px 4px rgb(0 0 0 / 0.4), 0 24px 48px -24px rgb(0 0 0 / 0.75);
+  --shadow-sheet: 0 -8px 32px -12px rgb(0 0 0 / 0.7);
+  color-scheme: dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  /* Before the theme script runs, or without JavaScript: the same values as [data-theme="dark"]
+     (kept identical by tests/unit/theme.test.ts). */
+  :root:not([data-theme]) {
+    --color-canvas: #121216;
+    --color-sunken: #0e0e12;
+    --color-surface: #1a1a20;
+    --color-elevated: #22222a;
+    --color-ink: #ececf1;
+    --color-muted: #a6a6b1;
+    --color-line: #2c2c35;
+    --color-line-strong: #3d3d48;
+    --color-accent: #a9aefa;
+    --color-accent-hover: #bbbffb;
+    --color-on-accent: #17173a;
+    --color-accent-ink: #b9bdfb;
+    --color-accent-soft: #262849;
+    --color-success: #57c891;
+    --color-success-soft: #15291f;
+    --color-warning: #e2b257;
+    --color-warning-soft: #2c2414;
+    --color-danger: #f28b82;
+    --color-danger-soft: #331b1a;
+    --color-on-danger: #2a0f0d;
+    --color-danger-hover: #f6a39c;
+    --color-focus: #a9aefa;
+    --color-sky-tint: #17262f;
+    --color-lavender-tint: #22243f;
+    --color-mint-tint: #16281d;
+    --color-yellow-tint: #2b2615;
+    --color-coral-tint: #301c1b;
+    --color-black: #0b0b0e;
+    --color-scrim: rgb(0 0 0 / 0.6);
+    --color-board: #16161b;
+    --color-board-dot: #2e2e37;
+    --color-canvas-ink: #e9e9ee;
+    --shadow-soft: 0 1px 2px rgb(0 0 0 / 0.4), 0 8px 24px -12px rgb(0 0 0 / 0.6);
+    --shadow-lift: 0 2px 4px rgb(0 0 0 / 0.4), 0 24px 48px -24px rgb(0 0 0 / 0.75);
+    --shadow-sheet: 0 -8px 32px -12px rgb(0 0 0 / 0.7);
+    color-scheme: dark;
+  }
 }
 
 @keyframes toast-in {
@@ -77,6 +233,15 @@
   }
 }
 
+@keyframes sheet-in {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
 @keyframes shimmer {
   from {
     background-position: 200% 0;
@@ -88,8 +253,9 @@
 
 @layer base {
   html {
-    background: var(--color-warm);
+    background: var(--color-canvas);
     color: var(--color-ink);
+    color-scheme: light;
     font-family: var(--font-sans);
     font-feature-settings: "cv11", "ss03";
     -webkit-text-size-adjust: 100%;
@@ -157,7 +323,7 @@
 
   .prose-legal p,
   .prose-legal li {
-    color: #3d3d3d;
+    color: color-mix(in srgb, var(--color-ink) 82%, transparent);
     line-height: 1.7;
     max-width: 68ch;
   }
@@ -178,8 +344,23 @@
   }
 
   .canvas-grid {
-    background-color: var(--color-warm);
-    background-image: radial-gradient(circle, #d9d3c8 1px, transparent 1px);
+    background-color: var(--color-board);
+    background-image: radial-gradient(circle, var(--color-board-dot) 1px, transparent 1px);
+  }
+
+  /* Board content in the dark theme. Objects store real colours (near-black ink, white
+     shapes, pastel notes) chosen on a light board. Rather than recolour each one, the
+     content layer is drawn with lightness inverted and hue kept (invert, then turn the hue
+     back 180°): ink becomes light, white shapes become dark, notes become deep tints of the
+     same colour, and text stays readable on every note. Stored colours never change, and
+     exports (src/lib/board/export.ts) draw the stored colours. */
+  [data-theme="dark"] .board-ink {
+    filter: invert(0.9) hue-rotate(180deg);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme]) .board-ink {
+      filter: invert(0.9) hue-rotate(180deg);
+    }
   }
 }
 

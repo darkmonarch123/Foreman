@@ -1,7 +1,11 @@
 import { AppError, type ActionResult } from "@/lib/errors";
 import {
   acceptAssistantProposal,
+  clearAssistantFeedback,
   editAssistantProposal,
+  getAssistantHiddenRules,
+  setAssistantFeedback,
+  setAssistantRuleHidden,
   getAssistantProposals,
   markAssistantProposalViewed,
   rejectAssistantProposal,
@@ -37,6 +41,18 @@ export function createAssistantServices(boardId: string): AssistantServices {
     },
     async accept(proposalId) {
       return unwrap(await acceptAssistantProposal({ boardId, proposalId }));
+    },
+    async setFeedback(proposalId, feedback) {
+      return unwrap(await setAssistantFeedback({ boardId, proposalId, ...feedback }));
+    },
+    async clearFeedback(proposalId) {
+      unwrap(await clearAssistantFeedback({ boardId, proposalId }));
+    },
+    async setRuleHidden(ruleId, hidden) {
+      unwrap(await setAssistantRuleHidden({ boardId, ruleId, hidden }));
+    },
+    async hiddenRules() {
+      return unwrap(await getAssistantHiddenRules({ boardId }));
     },
   };
 }

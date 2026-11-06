@@ -119,8 +119,11 @@ test.describe("keyboard and assistive technology", () => {
     openBoard,
   }) => {
     const page = await openBoard("ada");
-    const toolbar = page.getByRole("toolbar", { name: "Canvas tools" });
-    await expect(toolbar.getByRole("button")).toHaveCount(11);
+    // Desktop width: the full board toolbar (tool rail on tablets, bottom bar on phones).
+    const toolbar = page.getByRole("toolbar", { name: "Board tools" });
+    // Select, pan, seven Add tools, comment, and four zoom controls; style, arrange and align
+    // appear only while something is selected.
+    await expect(toolbar.getByRole("button")).toHaveCount(14);
     for (const button of await toolbar.getByRole("button").all()) {
       expect((await button.getAttribute("aria-label"))?.length).toBeGreaterThan(2);
     }

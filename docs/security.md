@@ -110,6 +110,7 @@ authenticated requests and to protected paths get `Cache-Control: private, no-st
 | `localStorage`   | `foreman:cookie-consent`                  | `{ version, analytics, preferences, decidedAt }`                                                                      | Until cleared or the consent version changes             |
 | `localStorage`   | `foreman:pending:v1:<user id>:<board id>` | Board operations the server has not acknowledged yet, at most 500. **Includes the text and geometry of those edits.** | Removed when the queue empties                           |
 | `localStorage`   | `foreman:announcement:<id>:<user id>`     | `{ popupSeen, dismissed }` for a "What's new" announcement. No content                                                | Until cleared                                            |
+| `localStorage`   | `foreman:theme`                           | The word `light` or `dark` (absent for System). No identity, no token                                                 | Until cleared or set back to System                      |
 | `sessionStorage` | `foreman:verify-email`                    | The email address just used to register, to prefill "resend verification"                                             | The tab's lifetime                                       |
 | IndexedDB        | none                                      | Not used                                                                                                              |                                                          |
 
@@ -220,7 +221,8 @@ the URL. The three pages that can carry a token in the URL (`/verify-email`, `/j
 Every `next` value goes through `safeNextPath()` in `src/lib/routes.ts` before it is used: in `loginAction`
 (server side, before returning the destination), in `/auth/confirm`, and in the "Continue" link on
 `/verify-email`. It accepts only values that start with a single `/`, contain no backslash or control character,
-and still resolve to the same origin when parsed as a URL; anything else falls back to a fixed path. Tests:
+and still resolve to the same origin when parsed as a URL, and that are not a sign-in page (no loop), an auth
+callback or an API route; anything else falls back to a fixed path. Tests:
 `tests/unit/routes.test.ts` ("rejects anything that could leave the site"), `tests/unit/server-actions.test.ts`
 ("only ever redirects to a same-origin path"), `tests/components/auth-forms.test.tsx` ("never continues to an
 external address").
@@ -611,6 +613,20 @@ allows no third-party origin, so a browser could not reach one either.
 | Output encoding              | Excerpts, titles and proposed text are rendered as React text nodes; a test puts `<img onerror>` in a note and checks nothing is created or executed.                                                                                                                                                                                                             |
 | Scope of what it can do      | A proposal can only **create** one sticky note, text, rectangle, circle or arrow. There are no update, delete, owner, due-date or notification proposals, so accepting one can never overwrite or remove anyone's work.                                                                                                                                           |
 
+v1.1 and v1.2 additions ([details](assistant.md)):
+
+- **Snapshot.** `assistant_board_snapshot` runs the same pre-flight checks before reading anything, then returns
+  geometry, versions, `updated_at` and text only (no drawing points or styles), comment anchors without text, the
+  board's template slug and category, and **only the caller's own** feedback summary.
+- **Feedback** (`assistant_feedback`, `assistant_hidden_rules`, `assistant_feedback_events`): written only by
+  `SECURITY DEFINER` functions; RLS lets each person read only their own rows while they are a member; only the
+  creator of a finding can give feedback on it; reasons are a fixed list; every change is audited append-only; 120
+  changes an hour. Feedback changes ranking only and cannot touch the board.
+- **Fingerprints** are a rule id and object ids (checked by a database constraint), never text.
+- **Action extraction** proposes notes; an owner is never inferred without an explicit named commitment on the
+  note. Acceptance is unchanged.
+- **Planning clarity** is computed from counts and never quotes note text.
+
 Audit trail: `assistant_proposal_events` is append-only (a trigger refuses updates), clients have `SELECT` only,
 `seq` is `GENERATED ALWAYS`, the event writer is a private function no client can execute, and `actor_id` always
 comes from the session. `accepted`, `applied` and `marked_stale` are written only by `assistant_accept_proposal`
@@ -652,6 +668,14 @@ registration (`tests/unit/server-actions.test.ts`, "never returns or logs the pa
 
 What the hosting platform and Supabase log on their own (request URLs, IP addresses, Auth audit entries) is
 outside the app's control. Note again that invitation and share-link tokens are in URLs.
+
+### Performance timings
+
+`src/lib/perf` logs one JSON line per timed action with `"scope":"perf"`: action, duration, outcome, error code,
+board id and user id, nothing else (the event type has no field for content). Browser timings go to
+`POST /api/perf`, which validates each event strictly, caps the batch at 20 events and 8 KB, takes the user id from
+the session cookie (never the body), ignores signed-out visitors and always returns 204. See
+[Performance](performance.md).
 
 ### `security_events`
 

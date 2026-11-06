@@ -12,11 +12,11 @@ const base =
   "active:translate-y-px disabled:opacity-50 disabled:active:translate-y-0 aria-disabled:opacity-50";
 
 const variants: Record<ButtonVariant, string> = {
-  primary: "bg-black text-white hover:bg-[#2b2b2b] rounded-full",
+  primary: "bg-accent text-on-accent hover:bg-accent-hover rounded-full",
   secondary: "bg-surface text-ink border border-line hover:border-line-strong shadow-soft rounded-full",
-  outline: "bg-transparent text-ink border border-ink/80 hover:bg-ink hover:text-white rounded-full",
+  outline: "bg-transparent text-ink border border-ink/80 hover:bg-ink hover:text-canvas rounded-full",
   ghost: "bg-transparent text-ink hover:bg-ink/6 rounded-control",
-  danger: "bg-error text-white hover:bg-[#a53125] rounded-full",
+  danger: "bg-danger text-on-danger hover:bg-danger-hover rounded-full",
 };
 
 const sizes: Record<ButtonSize, string> = {
@@ -87,8 +87,8 @@ export function IconButton({
       className={cn(
         "inline-flex shrink-0 items-center justify-center rounded-control text-ink transition-colors duration-150",
         "hover:bg-ink/6 disabled:opacity-40",
-        size === "sm" ? "size-8" : "size-10",
-        active && "bg-ink text-white hover:bg-ink",
+        size === "sm" ? "size-8 pointer-coarse:size-11" : "size-10 pointer-coarse:size-11",
+        active && "bg-accent text-on-accent hover:bg-accent",
         className,
       )}
       {...rest}

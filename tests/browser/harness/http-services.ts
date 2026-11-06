@@ -125,6 +125,15 @@ export function createHttpBoardServices(baseUrl: string, userKey: string): Board
             edit: (proposalId, proposal) => rpc("assistant.edit", { proposalId, proposal }),
             reject: (proposalId) => rpc("assistant.reject", { proposalId }),
             accept: (proposalId) => rpc("assistant.accept", { proposalId }),
+            setFeedback: (proposalId, feedback) =>
+              rpc("assistant.feedback", { proposalId, feedback: feedback as unknown as Record<string, unknown> }),
+            clearFeedback: async (proposalId) => {
+              await rpc("assistant.clearFeedback", { proposalId });
+            },
+            setRuleHidden: async (ruleId, hidden) => {
+              await rpc("assistant.ruleHidden", { ruleId, hidden });
+            },
+            hiddenRules: () => rpc("assistant.hiddenRules"),
           },
   };
 }

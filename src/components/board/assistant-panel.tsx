@@ -1,17 +1,31 @@
 "use client";
 
-import { Check, Eye, EyeOff, Pencil, Sparkles, Undo2, X } from "lucide-react";
+import { Check, ChevronDown, Eye, EyeOff, Pencil, Sparkles, ThumbsDown, ThumbsUp, Undo2, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { Button, IconButton } from "@/components/ui/button";
 import { Input, Select, Textarea } from "@/components/ui/field";
 import { Notice } from "@/components/ui/notice";
 import { Skeleton } from "@/components/ui/skeleton";
+import { CONFIDENCE_BANDS, confidenceBand } from "@/lib/assistant/bands";
 import {
   ASSISTANT_ACTION_LABELS,
   ASSISTANT_ACTIONS,
+  ASSISTANT_FOCUSES,
+  DEFAULT_VISIBLE_FINDINGS,
+  FOCUS_LABELS,
+  FEEDBACK_REASONS,
+  FEEDBACK_REASON_LABELS,
   MAX_GUIDANCE,
   MAX_PROPOSAL_TEXT,
+  RULE_LABELS,
   type AssistantAction,
+  type AssistantFeedback,
+  type AssistantFocus,
+  type AssistantTemplateContext,
+  type PlanningClarity,
+  type FeedbackReason,
+  type FeedbackRequest,
+  type RuleId,
   type AssistantAcceptResult,
   type AssistantProposalRecord,
   type AssistantServices,
@@ -21,6 +35,7 @@ import {
 import type { CanvasObject, ServerOperation } from "@/lib/board/types";
 import { cn } from "@/lib/cn";
 import { errorMessage, toAppError } from "@/lib/errors";
+import { startTimer } from "@/lib/perf/client";
 
 /** A request from outside the panel (the toolbar, context menu or a shortcut) to run something. */
 export interface AssistantIntent {
@@ -32,6 +47,8 @@ export interface AssistantIntent {
 
 interface AssistantPanelProps {
   services: AssistantServices;
+  /** For timing only. */
+  boardId?: string;
   canEdit: boolean;
   online: boolean;
   /** Live board objects, by id, used to spot stale proposals before the server is asked. */
@@ -50,12 +67,20 @@ type Phase = "loading" | "idle" | "running";
 
 const LABEL_TEXT = { fact: "Fact", inference: "Inference", suggestion: "Suggestion" } as const;
 const LABEL_STYLE = {
-  fact: "bg-mint-tint text-[#17563a]",
-  inference: "bg-yellow-tint text-[#6b470f]",
+  fact: "bg-success-soft text-success",
+  inference: "bg-warning-soft text-warning",
   suggestion: "bg-sky-tint text-ink",
 } as const;
 
 export type StaleKind = "changed" | "deleted";
+
+/** Most useful first (v1.1 ranking); Explain rows and older records without a score keep their order. */
+export function byUsefulness(records: AssistantProposalRecord[]): AssistantProposalRecord[] {
+  return records
+    .map((record, index) => ({ record, index }))
+    .sort((a, b) => (b.record.usefulness ?? -1) - (a.record.usefulness ?? -1) || a.index - b.index)
+    .map(({ record }) => record);
+}
 
 /** Compares the versions a finding was based on with the live board. The server checks again on accept. */
 export function clientStaleness(
@@ -87,6 +112,7 @@ function describeDraft(draft: ProposalDraft): string {
 
 export function AssistantPanel({
   services,
+  boardId,
   canEdit,
   online,
   objectsById,
@@ -108,7 +134,17 @@ export function AssistantPanel({
   const [undone, setUndone] = useState<ReadonlySet<string>>(() => new Set());
   const [error, setError] = useState<string | null>(null);
   const [hasRun, setHasRun] = useState(false);
-  const [meta, setMeta] = useState<{ exclusions: string[]; guidanceIgnored: boolean; truncated: boolean } | null>(null);
+  const [meta, setMeta] = useState<{
+    exclusions: string[];
+    guidanceIgnored: boolean;
+    truncated: boolean;
+    suppressed: number;
+    template: AssistantTemplateContext | null;
+    focus: AssistantFocus;
+    clarity: PlanningClarity | null;
+  } | null>(null);
+  const [showAll, setShowAll] = useState(false);
+  const [hiddenRules, setHiddenRules] = useState<string[] | null>(null);
   const [previewId, setPreviewId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -144,7 +180,7 @@ export function AssistantPanel({
     services.list().then(
       (records) => {
         if (cancelled || runStarted.current) return;
-        setItems(records.filter((record) => record.status === "pending" || record.status === "stale"));
+        setItems(byUsefulness(records.filter((record) => record.status === "pending" || record.status === "stale")));
         setPhase("idle");
       },
       (caught: unknown) => {
@@ -159,7 +195,7 @@ export function AssistantPanel({
   }, [services]);
 
   const run = useCallback(
-    async (nextAction: AssistantAction, nextContext: "board" | "object") => {
+    async (nextAction: AssistantAction, nextContext: "board" | "object", nextFocus: AssistantFocus = "everything") => {
       setError(null);
       setNotices(new Map());
       setEditingId(null);
@@ -171,25 +207,35 @@ export function AssistantPanel({
       runStarted.current = true;
       setPhase("running");
       onAnnounce(`Foreman Assistant: ${ASSISTANT_ACTION_LABELS[nextAction].label} is running`);
+      const timer = startTimer("assistant_run", { boardId });
       try {
         const result = await services.run({
           action: nextAction,
           context: nextContext === "object" && selected ? { kind: "object", objectId: selected.id } : { kind: "board" },
           ...(guidance.trim() ? { guidance: guidance.trim() } : {}),
+          ...(nextFocus !== "everything" ? { focus: nextFocus } : {}),
         });
-        setItems(result.proposals);
+        setItems(byUsefulness(result.proposals));
+        setShowAll(false);
+        setHiddenRules(null);
         setMeta({
           exclusions: result.exclusions,
           guidanceIgnored: result.guidanceIgnored,
           truncated: result.truncated,
+          suppressed: result.suppressed ?? 0,
+          focus: result.focus ?? nextFocus,
+          clarity: result.clarity ?? null,
+          template: result.template ?? null,
         });
         setHasRun(true);
+        timer.endAfterPaint();
         onAnnounce(
           result.proposals.length === 0
             ? "Foreman Assistant finished. No high-confidence planning gaps found."
             : `Foreman Assistant finished. ${result.proposals.length} ${result.proposals.length === 1 ? "finding" : "findings"}.`,
         );
       } catch (caught) {
+        timer.end("error", toAppError(caught).code);
         const message = errorMessage(caught);
         setError(message);
         onAnnounce(`Foreman Assistant could not finish. ${message}`);
@@ -197,7 +243,7 @@ export function AssistantPanel({
         setPhase("idle");
       }
     },
-    [services, selected, guidance, onAnnounce, setPreviewing],
+    [services, selected, guidance, onAnnounce, setPreviewing, boardId],
   );
 
   // A request from the toolbar, context menu or shortcut. Handled once per nonce.
@@ -216,6 +262,52 @@ export function AssistantPanel({
 
   const viewerBlocked = !canEdit && action === "propose_plan";
 
+  /** Optimistic: the card shows the choice at once and goes back if saving fails. */
+  async function giveFeedback(record: AssistantProposalRecord, request: FeedbackRequest | null) {
+    const previous = record.feedback ?? null;
+    const optimistic: AssistantFeedback | null = request
+      ? { helpful: request.helpful, reasons: request.helpful ? [] : (request.reasons ?? []) }
+      : null;
+    const put = (feedback: AssistantFeedback | null) =>
+      setItems((current) => current.map((item) => (item.id === record.id ? { ...item, feedback } : item)));
+    put(optimistic);
+    try {
+      if (request) {
+        put(await services.setFeedback(record.id, request));
+        if (request.hideRule && record.rule_id) {
+          setHiddenRules((current) => [...new Set([...(current ?? []), record.rule_id as string])]);
+          onAnnounce(`${RULE_LABELS[record.rule_id]} are hidden on this board for you.`);
+        } else {
+          onAnnounce("Thanks. Feedback saved.");
+        }
+      } else {
+        await services.clearFeedback(record.id);
+        onAnnounce("Feedback removed.");
+      }
+    } catch (caught) {
+      put(previous);
+      setError(errorMessage(caught));
+    }
+  }
+
+  async function showRule(ruleId: string) {
+    try {
+      await services.setRuleHidden(ruleId, false);
+      setHiddenRules((current) => (current ?? []).filter((id) => id !== ruleId));
+      onAnnounce(`${RULE_LABELS[ruleId as RuleId] ?? "Findings"} will be shown again next time you run the Assistant.`);
+    } catch (caught) {
+      setError(errorMessage(caught));
+    }
+  }
+
+  async function loadHiddenRules() {
+    try {
+      setHiddenRules(await services.hiddenRules());
+    } catch (caught) {
+      setError(errorMessage(caught));
+    }
+  }
+
   async function accept(record: AssistantProposalRecord) {
     setBusyId(record.id);
     setNotices((current) => {
@@ -223,8 +315,19 @@ export function AssistantPanel({
       next.delete(record.id);
       return next;
     });
+    const timer = startTimer("proposal_accept", { boardId });
     try {
       const result: AssistantAcceptResult = await services.accept(record.id);
+      timer.endAfterPaint(
+        result.status === "applied" || result.status === "already_applied"
+          ? "ok"
+          : result.status === "stale"
+            ? "stale"
+            : result.status === "failed"
+              ? "error"
+              : "rejected",
+        result.status === "failed" ? result.code : undefined,
+      );
       setPreviewing(null, null);
       switch (result.status) {
         case "applied":
@@ -257,6 +360,7 @@ export function AssistantPanel({
       }
     } catch (caught) {
       const code = toAppError(caught).code;
+      timer.end("error", code);
       const message =
         code === "BOARD_ACCESS_DENIED"
           ? "You no longer have permission to apply changes on this board."
@@ -319,7 +423,7 @@ export function AssistantPanel({
     <aside
       aria-label="Foreman Assistant"
       onKeyDown={onPanelKeyDown}
-      className="flex h-full w-[24rem] max-w-[92vw] shrink-0 flex-col border-l border-line bg-warm"
+      className="flex h-[88dvh] w-full shrink-0 flex-col bg-canvas pb-[env(safe-area-inset-bottom)] tablet:h-full tablet:w-[24rem] tablet:max-w-[92vw] tablet:border-l tablet:border-line tablet:pb-0"
     >
       <div className="flex items-center justify-between px-4 pt-3">
         <h2 ref={headingRef} tabIndex={-1} className="flex items-center gap-2 text-sm font-medium outline-none">
@@ -403,7 +507,71 @@ export function AssistantPanel({
         {meta && meta.exclusions.length > 0 ? (
           <p className="mt-4 text-xs text-muted">Leaving out: {meta.exclusions.join(", ")}</p>
         ) : null}
-        {meta?.truncated ? <p className="mt-2 text-xs text-muted">Showing the 10 most confident findings.</p> : null}
+        {meta?.template ? (
+          <p className="mt-4 text-xs leading-relaxed text-muted" data-testid="assistant-template">
+            Tuned for this board’s template: aiming for {meta.template.outcome}.
+          </p>
+        ) : null}
+        {meta?.truncated ? <p className="mt-2 text-xs text-muted">Showing the 10 most useful findings.</p> : null}
+        {meta && meta.suppressed > 0 ? (
+          <div className="mt-2 text-xs text-muted">
+            {meta.suppressed} {meta.suppressed === 1 ? "finding was" : "findings were"} left out because of your
+            feedback.{" "}
+            {hiddenRules === null ? (
+              <button
+                type="button"
+                className="underline underline-offset-2 hover:text-ink"
+                onClick={() => void loadHiddenRules()}
+              >
+                Manage hidden findings
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+        {hiddenRules && hiddenRules.length > 0 ? (
+          <ul aria-label="Hidden types of finding" className="mt-2 flex flex-col gap-1.5">
+            {hiddenRules.map((ruleId) => (
+              <li
+                key={ruleId}
+                className="flex items-center justify-between gap-2 rounded-control bg-sunken px-3 py-1.5 text-xs"
+              >
+                <span>{RULE_LABELS[ruleId as RuleId] ?? ruleId}: hidden on this board</span>
+                <Button size="sm" variant="ghost" onClick={() => void showRule(ruleId)}>
+                  Show again
+                </Button>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+
+        {meta?.clarity && phase === "idle" ? <ClarityCard clarity={meta.clarity} /> : null}
+
+        {hasRun && !explainOnly && phase !== "loading" ? (
+          <div role="group" aria-labelledby="assistant-focus" className="mt-4">
+            <p id="assistant-focus" className="text-sm font-medium">
+              What should Assistant focus on?
+            </p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {ASSISTANT_FOCUSES.map((option) => (
+                <button
+                  key={option}
+                  type="button"
+                  aria-pressed={(meta?.focus ?? "everything") === option}
+                  disabled={phase !== "idle"}
+                  onClick={() => void run(action, contextKind, option)}
+                  className={cn(
+                    "min-h-9 rounded-full border px-3.5 text-[13px] transition-colors disabled:opacity-50 pointer-coarse:min-h-11",
+                    (meta?.focus ?? "everything") === option
+                      ? "border-accent bg-accent text-on-accent"
+                      : "border-line bg-surface hover:border-line-strong",
+                  )}
+                >
+                  {FOCUS_LABELS[option]}
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : null}
 
         <div className="mt-5" aria-busy={phase !== "idle"}>
           {phase === "loading" || phase === "running" ? (
@@ -426,7 +594,7 @@ export function AssistantPanel({
                 </h3>
               )}
               <ul className="flex flex-col gap-3">
-                {items.map((record) => (
+                {(showAll || explainOnly ? items : items.slice(0, DEFAULT_VISIBLE_FINDINGS)).map((record) => (
                   <ProposalCard
                     key={record.id}
                     record={record}
@@ -452,6 +620,7 @@ export function AssistantPanel({
                     onSaveEdit={(text) => void saveEdit(record, text)}
                     onAccept={() => void accept(record)}
                     onReject={() => void reject(record)}
+                    onFeedback={(request) => void giveFeedback(record, request)}
                     onUndo={(objectId) => {
                       if (onUndoApplied(objectId)) {
                         setUndone((current) => new Set(current).add(record.id));
@@ -461,6 +630,12 @@ export function AssistantPanel({
                   />
                 ))}
               </ul>
+              {!showAll && !explainOnly && items.length > DEFAULT_VISIBLE_FINDINGS ? (
+                <Button variant="secondary" size="sm" className="mt-3 w-full" onClick={() => setShowAll(true)}>
+                  <ChevronDown className="size-4" aria-hidden />
+                  Show more findings ({items.length - DEFAULT_VISIBLE_FINDINGS})
+                </Button>
+              ) : null}
             </>
           )}
         </div>
@@ -489,6 +664,7 @@ interface ProposalCardProps {
   onAccept: () => void;
   onReject: () => void;
   onUndo: (objectId: string) => void;
+  onFeedback: (request: FeedbackRequest | null) => void;
 }
 
 function ProposalCard({
@@ -511,6 +687,7 @@ function ProposalCard({
   onAccept,
   onReject,
   onUndo,
+  onFeedback,
 }: ProposalCardProps) {
   const draft = currentDraft(record);
   const cardRef = useRef<HTMLLIElement>(null);
@@ -540,6 +717,7 @@ function ProposalCard({
   }, [isApplied]);
   const [text, setText] = useState(draft?.object.props.text ?? "");
   const percent = Math.round(record.confidence * 100);
+  const band = CONFIDENCE_BANDS[confidenceBand(record.confidence)];
   const titleId = `finding-${record.id}`;
   const textLimitError =
     text.length > MAX_PROPOSAL_TEXT ? `Keep the text under ${MAX_PROPOSAL_TEXT} characters.` : undefined;
@@ -558,6 +736,9 @@ function ProposalCard({
         <span className={cn("rounded-full px-2 py-0.5 text-xs font-medium", LABEL_STYLE[record.label])}>
           {LABEL_TEXT[record.label]}
         </span>
+        <span className="text-xs font-medium text-ink" title={band.explanation}>
+          {band.label}
+        </span>
         <span className="text-xs text-muted">Confidence {percent}%</span>
         {record.status === "edited_accepted" || record.edited_proposal ? (
           <span className="text-xs text-muted">Edited</span>
@@ -567,6 +748,9 @@ function ProposalCard({
         {record.title}
       </h4>
       <p className="mt-1 text-sm leading-relaxed text-ink/80">{record.explanation}</p>
+      <p className="mt-1 text-xs leading-snug text-muted">
+        {band.label}: {band.explanation}
+      </p>
 
       {record.evidence.length > 0 ? (
         <div className="mt-3">
@@ -639,7 +823,7 @@ function ProposalCard({
       {draft ? (
         isApplied ? (
           <div className="mt-3 flex flex-wrap items-center gap-2">
-            <span className="inline-flex items-center gap-1.5 text-sm text-[#17563a]">
+            <span className="inline-flex items-center gap-1.5 text-sm text-success">
               <Check className="size-4" aria-hidden />
               {undone ? "Undone" : "Added to the board"}
             </span>
@@ -686,6 +870,7 @@ function ProposalCard({
       {draft && canEdit && !online && !isApplied ? (
         <p className="mt-2 text-xs text-muted">You’re offline. Reconnect to accept this proposal.</p>
       ) : null}
+      {record.rule_id ? <FeedbackControls record={record} onFeedback={onFeedback} /> : null}
     </li>
   );
 }
@@ -701,5 +886,144 @@ function EvidenceRow({ item, missing, onView }: { item: EvidenceRef; missing: bo
         View
       </Button>
     </li>
+  );
+}
+
+/**
+ * Helpful / Not helpful, with optional reasons and "hide this type". Changes ranking for the
+ * next run only; it never changes the board. Feedback can be changed or removed at any time.
+ */
+function FeedbackControls({
+  record,
+  onFeedback,
+}: {
+  record: AssistantProposalRecord;
+  onFeedback: (request: FeedbackRequest | null) => void;
+}) {
+  const feedback = record.feedback ?? null;
+  const reasons = new Set<FeedbackReason>(feedback?.reasons ?? []);
+  const groupId = `feedback-${record.id}`;
+  const toggleReason = (reason: FeedbackReason) => {
+    const next = new Set(reasons);
+    if (next.has(reason)) next.delete(reason);
+    else next.add(reason);
+    onFeedback({ helpful: false, reasons: [...next] });
+  };
+  return (
+    <div className="mt-3 border-t border-line pt-3">
+      <div role="group" aria-labelledby={groupId} className="flex flex-wrap items-center gap-2">
+        <span id={groupId} className="text-xs text-muted">
+          Was this useful?
+        </span>
+        <Button
+          size="sm"
+          variant="ghost"
+          aria-pressed={feedback?.helpful === true}
+          className={cn(feedback?.helpful === true && "bg-success-soft text-success")}
+          onClick={() => onFeedback(feedback?.helpful === true ? null : { helpful: true })}
+        >
+          <ThumbsUp className="size-4" aria-hidden />
+          Helpful
+        </Button>
+        <Button
+          size="sm"
+          variant="ghost"
+          aria-pressed={feedback?.helpful === false}
+          className={cn(feedback?.helpful === false && "bg-danger-soft text-danger")}
+          onClick={() => onFeedback(feedback?.helpful === false ? null : { helpful: false, reasons: [] })}
+        >
+          <ThumbsDown className="size-4" aria-hidden />
+          Not helpful
+        </Button>
+      </div>
+      {feedback?.helpful === false ? (
+        <div className="mt-2 flex flex-col gap-2">
+          <div role="group" aria-label="Why wasn’t it helpful? (optional)" className="flex flex-wrap gap-1.5">
+            {FEEDBACK_REASONS.map((reason) => (
+              <button
+                key={reason}
+                type="button"
+                aria-pressed={reasons.has(reason)}
+                onClick={() => toggleReason(reason)}
+                className={cn(
+                  "min-h-8 rounded-full border px-3 text-xs transition-colors pointer-coarse:min-h-11",
+                  reasons.has(reason)
+                    ? "border-accent bg-accent-soft text-accent-ink"
+                    : "border-line bg-surface hover:border-line-strong",
+                )}
+              >
+                {FEEDBACK_REASON_LABELS[reason]}
+              </button>
+            ))}
+          </div>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="self-start"
+            onClick={() => onFeedback({ helpful: false, reasons: [...reasons], hideRule: true })}
+          >
+            Hide this type of finding on this board
+          </Button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/** Planning clarity, 0–100, with what is good, what is missing and what would help most. */
+function ClarityCard({ clarity }: { clarity: PlanningClarity }) {
+  const tone = clarity.score >= 75 ? "bg-success" : clarity.score >= 50 ? "bg-warning" : "bg-danger";
+  return (
+    <section aria-labelledby="clarity-heading" className="mt-4 rounded-card border border-line bg-surface p-4">
+      <div className="flex items-baseline justify-between gap-3">
+        <h3 id="clarity-heading" className="text-sm font-medium">
+          Planning clarity
+        </h3>
+        <p className="text-sm">
+          <span className="font-display text-2xl tabular-nums">{clarity.score}</span>
+          <span className="text-muted">/100</span>
+        </p>
+      </div>
+      <div
+        role="meter"
+        aria-labelledby="clarity-heading"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={clarity.score}
+        className="mt-2 h-1.5 overflow-hidden rounded-full bg-sunken"
+      >
+        <div className={cn("h-full rounded-full", tone)} style={{ width: `${clarity.score}%` }} />
+      </div>
+      {clarity.strengths.length > 0 ? (
+        <>
+          <h4 className="mt-3 text-xs font-medium text-muted">Strengths</h4>
+          <ul className="mt-1 list-disc pl-4 text-sm leading-relaxed">
+            {clarity.strengths.map((text) => (
+              <li key={text}>{text}</li>
+            ))}
+          </ul>
+        </>
+      ) : null}
+      {clarity.gaps.length > 0 ? (
+        <>
+          <h4 className="mt-3 text-xs font-medium text-muted">Gaps</h4>
+          <ul className="mt-1 list-disc pl-4 text-sm leading-relaxed">
+            {clarity.gaps.map((text) => (
+              <li key={text}>{text}</li>
+            ))}
+          </ul>
+        </>
+      ) : null}
+      {clarity.improvements.length > 0 ? (
+        <>
+          <h4 className="mt-3 text-xs font-medium text-muted">What would improve it</h4>
+          <ul className="mt-1 list-disc pl-4 text-sm leading-relaxed">
+            {clarity.improvements.map((text) => (
+              <li key={text}>{text}</li>
+            ))}
+          </ul>
+        </>
+      ) : null}
+    </section>
   );
 }

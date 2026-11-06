@@ -635,7 +635,9 @@ test.describe("feature flag off", () => {
     await page.keyboard.press("Escape");
     const box = await page.locator("[data-object-id]").first().boundingBox();
     await page.mouse.click(box!.x + box!.width / 2, box!.y + box!.height / 2);
-    await expect(page.getByRole("toolbar", { name: "Sticky note options" })).toBeVisible();
+    await expect(
+      page.getByRole("toolbar", { name: "Board tools" }).getByRole("group", { name: "Style" }),
+    ).toBeVisible();
     await expect(page.getByRole("button", { name: "Ask Foreman about this item" })).toHaveCount(0);
     await page.mouse.click(box!.x + box!.width / 2, box!.y + box!.height / 2, { button: "right" });
     for (const name of ["Explain this board", "Find planning gaps", "Propose a plan"]) {

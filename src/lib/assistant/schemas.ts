@@ -1,5 +1,13 @@
 import { z } from "zod";
-import { ASSISTANT_ACTIONS, MAX_GUIDANCE, MAX_PROPOSAL_TEXT, PROPOSAL_OBJECT_TYPES } from "./types";
+import {
+  ASSISTANT_ACTIONS,
+  ASSISTANT_FOCUSES,
+  FEEDBACK_REASONS,
+  MAX_GUIDANCE,
+  MAX_PROPOSAL_TEXT,
+  PROPOSAL_OBJECT_TYPES,
+  RULE_IDS,
+} from "./types";
 
 /** Zod schemas for everything that crosses the Server Action boundary. */
 
@@ -47,6 +55,7 @@ export const runAnalysisSchema = z
     action: z.enum(ASSISTANT_ACTIONS),
     context: analysisContextSchema,
     guidance: z.string().trim().max(MAX_GUIDANCE, `Keep guidance under ${MAX_GUIDANCE} characters.`).optional(),
+    focus: z.enum(ASSISTANT_FOCUSES).optional(),
   })
   .strict();
 
@@ -55,5 +64,21 @@ export const proposalIdSchema = z.object({ boardId: z.uuid(), proposalId: z.uuid
 export const editProposalSchema = z
   .object({ boardId: z.uuid(), proposalId: z.uuid(), proposal: proposalDraftSchema })
   .strict();
+
+export const feedbackSchema = z
+  .object({
+    boardId: z.uuid(),
+    proposalId: z.uuid(),
+    helpful: z.boolean(),
+    reasons: z.array(z.enum(FEEDBACK_REASONS)).max(FEEDBACK_REASONS.length).default([]),
+    hideRule: z.boolean().default(false),
+  })
+  .strict()
+  .refine((value) => !value.helpful || value.reasons.length === 0, {
+    message: "Reasons are only for findings that were not helpful.",
+    path: ["reasons"],
+  });
+
+export const ruleHiddenSchema = z.object({ boardId: z.uuid(), ruleId: z.enum(RULE_IDS), hidden: z.boolean() }).strict();
 
 export type RunAnalysisInput = z.infer<typeof runAnalysisSchema>;

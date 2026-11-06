@@ -5,6 +5,7 @@ import { Download, RefreshCw } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState, useTransition } from "react";
 import { useForm } from "react-hook-form";
+import { ThemeChoice } from "@/components/theme/theme-choice";
 import { Avatar } from "@/components/ui/avatar";
 import { Button, buttonClasses } from "@/components/ui/button";
 import { Input, PasswordInput, Toggle } from "@/components/ui/field";
@@ -37,6 +38,7 @@ const TABS = [
   { id: "profile", label: "Profile" },
   { id: "security", label: "Security" },
   { id: "privacy", label: "Privacy and data" },
+  { id: "appearance", label: "Appearance" },
   { id: "notifications", label: "Notifications" },
   { id: "sessions", label: "Sessions" },
 ];
@@ -117,7 +119,9 @@ function ProfileTab({ profile }: { profile: Profile }) {
                       onClick={() => (active ? undefined : regenerate(value))}
                       className={cn(
                         "h-9 rounded-full border px-4 text-sm transition-colors",
-                        active ? "border-ink bg-ink text-white" : "border-line bg-surface hover:border-line-strong",
+                        active
+                          ? "border-accent bg-accent text-on-accent"
+                          : "border-line bg-surface hover:border-line-strong",
                       )}
                     >
                       {value === "FEMALE" ? "Female" : "Male"}
@@ -399,6 +403,14 @@ function NotificationsTab({ profile }: { profile: Profile }) {
   );
 }
 
+function AppearanceTab() {
+  return (
+    <Card title="Appearance" description="Choose how Foreman looks. Boards stay readable in both themes.">
+      <ThemeChoice />
+    </Card>
+  );
+}
+
 function SessionsTab() {
   const [pending, startTransition] = useTransition();
   return (
@@ -436,6 +448,7 @@ export function SettingsView({ profile }: { profile: Profile }) {
       {tab === "profile" ? <ProfileTab profile={profile} /> : null}
       {tab === "security" ? <SecurityTab /> : null}
       {tab === "privacy" ? <PrivacyTab /> : null}
+      {tab === "appearance" ? <AppearanceTab /> : null}
       {tab === "notifications" ? <NotificationsTab profile={profile} /> : null}
       {tab === "sessions" ? <SessionsTab /> : null}
     </Tabs>

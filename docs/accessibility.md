@@ -507,6 +507,21 @@ are `aria-disabled`, status reads "View only").
 | `auth-forms.test.tsx`   | Inline errors for every missing field; the password visibility toggle; server-side field errors shown next to the field                                                                                                                                                                                                                  |
 | `app.test.tsx`          | Cookie banner and preferences dialog; confirmation dialogs on board cards                                                                                                                                                                                                                                                                |
 
+## Dark mode, phones and touch (v1.1)
+
+- Light, Dark and System themes; every text colour pair used by the components meets WCAG AA in both themes
+  (checked in `tests/unit/theme.test.ts`). Focus rings keep 3:1 against surfaces in both themes.
+- The theme choice is a labelled radio group (Settings → Appearance, the board's More sheet) and radio menu items
+  (`menuitemradio` with `aria-checked`) in the account and More menus.
+- Phones: the bottom toolbar is a `nav` named "Board actions" with visible labels on every button; touch targets are
+  at least 44×44 with 12px between them. Sheets are modal dialogs: focus moves in, Tab stays inside, Escape closes
+  and focus returns to the button that opened them.
+- Press and hold an item opens the same menu as right-click, so nothing needs a right mouse button. Every action in
+  that menu is also in the Edit sheet or the Outline.
+- Multi-select is announced ("2 items selected"); Align and Arrange buttons say why they are unavailable.
+- Assistant: confidence bands are words (Clear, Likely, Possible) with an explanation, not colour alone; feedback
+  buttons are toggle buttons with `aria-pressed`; Planning clarity is a labelled `meter`.
+
 ## Known limitations
 
 Barriers, most serious first.

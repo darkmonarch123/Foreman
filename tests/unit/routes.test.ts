@@ -7,6 +7,13 @@ describe("safeNextPath", () => {
     expect(safeNextPath("/dashboard?view=shared")).toBe("/dashboard?view=shared");
   });
 
+  it("never returns to sign-in pages, auth callbacks or API routes", () => {
+    for (const value of ["/login", "/login?next=/login", "/register", "/auth/confirm?next=/x", "/api/perf"]) {
+      expect(safeNextPath(value, "/dashboard"), value).toBe("/dashboard");
+    }
+    expect(safeNextPath("/boards/abc?assistant=open")).toBe("/boards/abc?assistant=open");
+  });
+
   it("rejects anything that could leave the site", () => {
     for (const value of [
       "https://evil.example",

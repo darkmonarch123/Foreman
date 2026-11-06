@@ -91,7 +91,7 @@ export function Tabs({
             >
               {tab.label}
               {tab.count ? (
-                <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-ink px-1.5 text-[11px] text-white">
+                <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-ink px-1.5 text-[11px] text-canvas">
                   {tab.count}
                 </span>
               ) : null}

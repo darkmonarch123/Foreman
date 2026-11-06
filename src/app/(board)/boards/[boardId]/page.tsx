@@ -7,9 +7,10 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { requireProfile } from "@/lib/auth/dal";
 import type { Member } from "@/lib/board/services";
 import type { BoardState } from "@/lib/board/types";
-import { getBoardMembers, isUuid, loadBoardState } from "@/lib/boards/data";
+import { isUuid, loadBoardPage } from "@/lib/boards/data";
 import { isAssistantEnabled } from "@/lib/assistant/flag";
 import { toAppError } from "@/lib/errors";
+import { timeServer } from "@/lib/perf/server";
 
 export const metadata: Metadata = { title: "Board" };
 
@@ -22,12 +23,15 @@ async function BoardLoader({ params, searchParams }: { params: Params; searchPar
   const openAssistant = (await searchParams).assistant === "open";
   const profile = await requireProfile(isUuid(boardId) ? `/boards/${boardId}` : "/dashboard");
 
-  // Both calls are authorised in the database against the signed-in user.
   let loaded: { state: BoardState; members: Member[] } | null = null;
   let failure: string | null = null;
   try {
-    const state = await loadBoardState(boardId);
-    if (state) loaded = { state, members: await getBoardMembers(boardId) };
+    loaded = await timeServer(
+      "board_open",
+      { boardId: isUuid(boardId) ? boardId : undefined, userId: profile.id },
+      // One round trip for state and members; the database checks membership.
+      () => loadBoardPage(boardId),
+    );
   } catch (error) {
     const appError = toAppError(error);
     if (appError.code !== "BOARD_NOT_FOUND" && appError.code !== "BOARD_ACCESS_DENIED") failure = appError.message;
@@ -48,6 +52,8 @@ async function BoardLoader({ params, searchParams }: { params: Params; searchPar
         last_name: profile.last_name,
         username: profile.username,
         avatar_url: profile.avatar_url,
+        email: profile.email,
+        theme_preference: profile.theme_preference,
       }}
     />
   );

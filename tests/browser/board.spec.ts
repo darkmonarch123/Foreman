@@ -137,7 +137,7 @@ test.describe("editing", () => {
     await drag(740, 620, 860, 690);
     await page.keyboard.press("Escape");
     await page.keyboard.press("p");
-    await drag(120, 780, 300, 800);
+    await drag(120, 700, 300, 720);
     await page.keyboard.press("v");
 
     await expect.poll(async () => (await serverState()).log.length).toBe(4);

@@ -35,8 +35,64 @@ export const RULE_IDS = [
   "overlapping_objects",
   "theme_without_decision",
   "open_question_without_next_step",
+  // v1.2: action extraction
+  "extracted_decision",
+  "extracted_owner",
+  "extracted_risk",
+  "extracted_next_step",
 ] as const;
 export type RuleId = (typeof RULE_IDS)[number];
+
+/** Short names for each kind of finding, used when people hide or show a kind. */
+export const RULE_LABELS: Record<RuleId, string> = {
+  unanswered_question: "Unanswered questions",
+  action_without_owner: "Actions without an owner",
+  vague_note: "Vague notes",
+  possible_duplicate: "Possible duplicates",
+  disconnected_object: "Unconnected items",
+  overlapping_objects: "Overlapping items",
+  theme_without_decision: "Themes without a decision",
+  open_question_without_next_step: "Questions without a next step",
+  extracted_decision: "Decisions to record",
+  extracted_owner: "Owners to record",
+  extracted_risk: "Risks to record",
+  extracted_next_step: "Next steps to record",
+};
+
+/** v1.2 follow-up: "What should Assistant focus on?" */
+export const ASSISTANT_FOCUSES = ["everything", "decisions", "owners", "risks", "next_steps"] as const;
+export type AssistantFocus = (typeof ASSISTANT_FOCUSES)[number];
+
+export const FOCUS_LABELS: Record<AssistantFocus, string> = {
+  everything: "Everything",
+  decisions: "Decisions",
+  owners: "Owners",
+  risks: "Risks",
+  next_steps: "Next steps",
+};
+
+/** Which kinds of finding each focus keeps. "Everything" keeps all of them. */
+export const FOCUS_RULES: Record<Exclude<AssistantFocus, "everything">, readonly RuleId[]> = {
+  decisions: ["unanswered_question", "theme_without_decision", "extracted_decision"],
+  owners: ["action_without_owner", "extracted_owner"],
+  risks: ["extracted_risk", "theme_without_decision"],
+  next_steps: ["open_question_without_next_step", "extracted_next_step", "vague_note"],
+};
+
+/** Planning clarity: how ready the board is to act on, 0–100. */
+export interface PlanningClarity {
+  score: number;
+  /** Each part, 0–1, with how much it counts towards the score. */
+  parts: {
+    id: "decisions" | "owners" | "next_steps" | "clarity" | "structure";
+    label: string;
+    value: number;
+    weight: number;
+  }[];
+  strengths: string[];
+  gaps: string[];
+  improvements: string[];
+}
 
 /** Object types the Assistant may ask to create. Drawings are never proposed. */
 export const PROPOSAL_OBJECT_TYPES = ["STICKY_NOTE", "TEXT", "RECTANGLE", "CIRCLE", "ARROW"] as const;
@@ -49,6 +105,8 @@ export type ProposalStatus = (typeof PROPOSAL_STATUSES)[number];
 export const MIN_CONFIDENCE = 0.5;
 /** The most findings one run returns. */
 export const MAX_FINDINGS = 10;
+/** How many findings the panel shows before "Show more findings". */
+export const DEFAULT_VISIBLE_FINDINGS = 5;
 /** Longest proposed note text. Matches what the database accepts. */
 export const MAX_PROPOSAL_TEXT = 200;
 /** Longest stored excerpt of user content. */
@@ -95,6 +153,46 @@ export interface Finding {
   /** The existing object the proposal is about, if any. Used for stale detection. */
   target_object_id: string | null;
   target_object_version: number | null;
+  /** 0..1: how useful this is likely to be, used to rank (see rank.ts). Null for Explain rows. */
+  usefulness: number | null;
+  /** Rule id and sorted evidence ids. Identifies "the same finding" across runs; never contains text. */
+  fingerprint: string | null;
+}
+
+export const FEEDBACK_REASONS = ["irrelevant", "duplicate", "wrong_evidence", "too_obvious", "wrong_action"] as const;
+export type FeedbackReason = (typeof FEEDBACK_REASONS)[number];
+
+export const FEEDBACK_REASON_LABELS: Record<FeedbackReason, string> = {
+  irrelevant: "Irrelevant",
+  duplicate: "Duplicate",
+  wrong_evidence: "Wrong evidence",
+  too_obvious: "Too obvious",
+  wrong_action: "Wrong suggested action",
+};
+
+/** The caller's own feedback on one finding. */
+export interface AssistantFeedback {
+  helpful: boolean;
+  reasons: FeedbackReason[];
+  updated_at?: string;
+}
+
+/** The caller's feedback on a board, summarised for ranking. Never includes anyone else's. */
+export interface FeedbackSummary {
+  hidden_rules: string[];
+  rules: Record<string, { helpful: number; not_helpful: number }>;
+  /** Fingerprints the caller marked not helpful. */
+  not_helpful: string[];
+}
+
+/** What the Assistant knows about the template a board started from. */
+export interface AssistantTemplateContext {
+  templateId: string;
+  category: "PLANNING" | "BRAINSTORMING" | "STUDY" | "PRODUCT" | "ENGINEERING";
+  /** What a finished board of this kind should produce, in a few words. */
+  outcome: string;
+  /** Section headings the template starts with. */
+  expectedSections: string[];
 }
 
 export type AnalysisContext = { kind: "board" } | { kind: "object"; objectId: string };
@@ -111,6 +209,18 @@ export interface AnalysisInput {
   comments: readonly AnalysisComment[];
   context: AnalysisContext;
   guidance?: string | null;
+  /** The caller's feedback on this board (hidden rules, per-rule votes, findings marked not helpful). */
+  feedback?: FeedbackSummary | null;
+  template?: AssistantTemplateContext | null;
+  /** Milliseconds since the epoch, for freshness. Defaults to Date.now(). */
+  now?: number;
+  /** v1.2: keep only the kinds of finding for one focus. Default "everything". */
+  focus?: AssistantFocus;
+  /**
+   * False skips suppression, merging and combining and keeps the v1 order (confidence, rule,
+   * evidence), so each rule can be tested on its own. Scores are still attached. Default true.
+   */
+  postprocess?: boolean;
 }
 
 export interface AnalysisResult {
@@ -121,6 +231,12 @@ export interface AnalysisResult {
   guidanceIgnored: boolean;
   /** True when more than MAX_FINDINGS qualified and the lowest were dropped. */
   truncated: boolean;
+  /** How many findings were left out because of the caller's feedback (hidden or marked not helpful). */
+  suppressed: number;
+  template: AssistantTemplateContext | null;
+  focus: AssistantFocus;
+  /** Null for an empty board. */
+  clarity: PlanningClarity | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -142,6 +258,10 @@ export interface AssistantProposalRecord {
   label: FindingLabel;
   severity: Severity;
   confidence: number;
+  usefulness?: number | null;
+  fingerprint?: string | null;
+  /** The caller's own feedback, when listed. */
+  feedback?: AssistantFeedback | null;
   evidence: EvidenceRef[];
   proposal: ProposalDraft | null;
   edited_proposal: ProposalDraft | null;
@@ -156,6 +276,7 @@ export interface AssistantRunRequest {
   action: AssistantAction;
   context: AnalysisContext;
   guidance?: string;
+  focus?: AssistantFocus;
 }
 
 export interface AssistantRunResult {
@@ -163,6 +284,16 @@ export interface AssistantRunResult {
   exclusions: string[];
   guidanceIgnored: boolean;
   truncated: boolean;
+  suppressed?: number;
+  template?: AssistantTemplateContext | null;
+  focus?: AssistantFocus;
+  clarity?: PlanningClarity | null;
+}
+
+export interface FeedbackRequest {
+  helpful: boolean;
+  reasons?: FeedbackReason[];
+  hideRule?: boolean;
 }
 
 export type StaleReason = { object_id: string; reason: "changed" | "deleted" };
@@ -183,4 +314,10 @@ export interface AssistantServices {
   edit(proposalId: string, proposal: ProposalDraft): Promise<AssistantProposalRecord>;
   reject(proposalId: string): Promise<AssistantProposalRecord>;
   accept(proposalId: string): Promise<AssistantAcceptResult>;
+  /** Records or changes the caller's feedback on a finding. Changes ranking only. */
+  setFeedback(proposalId: string, feedback: FeedbackRequest): Promise<AssistantFeedback>;
+  clearFeedback(proposalId: string): Promise<void>;
+  /** Shows (false) or hides (true) a type of finding on this board for the caller. */
+  setRuleHidden(ruleId: string, hidden: boolean): Promise<void>;
+  hiddenRules(): Promise<string[]>;
 }

@@ -11,6 +11,7 @@ import type { BoardRole, BoardSummary, PendingOperation } from "@/lib/board/type
 import { ERROR_CATALOG, type ErrorCode } from "@/lib/errors";
 import { TEMPLATE_CATALOG } from "@/lib/templates/catalog";
 import { FakeBoardServer } from "../support/fake-board-server";
+import type { FeedbackRequest } from "@/lib/assistant/types";
 import { MemoryAssistant } from "../support/memory-assistant";
 
 /**
@@ -125,6 +126,8 @@ export class FakeBackend {
       this.board,
       (userId) => [...this.members.values()].find((entry) => entry.user_id === userId)?.role ?? null,
       BOARD_ID,
+      // The seeded board is the Project Roadmap template.
+      { slug: "project-roadmap", category: "PLANNING" },
     );
     this.log("ada", "BOARD_CREATED");
   }
@@ -384,6 +387,18 @@ export class FakeBackend {
         return this.assistantCall(key, (userId) =>
           this.assistant.edit(userId, String(args.proposalId), args.proposal as Parameters<MemoryAssistant["edit"]>[2]),
         );
+      case "assistant.feedback":
+        return this.assistantCall(key, (userId) =>
+          this.assistant.setFeedback(userId, String(args.proposalId), args.feedback as FeedbackRequest),
+        );
+      case "assistant.clearFeedback":
+        return this.assistantCall(key, (userId) => this.assistant.clearFeedback(userId, String(args.proposalId)));
+      case "assistant.ruleHidden":
+        return this.assistantCall(key, (userId) =>
+          this.assistant.setRuleHidden(userId, String(args.ruleId), Boolean(args.hidden)),
+        );
+      case "assistant.hiddenRules":
+        return this.assistantCall(key, (userId) => [...(this.assistant.hidden.get(userId) ?? [])].sort());
       case "assistant.reject":
         return this.assistantCall(key, (userId) => this.assistant.reject(userId, String(args.proposalId)));
       case "assistant.accept": {

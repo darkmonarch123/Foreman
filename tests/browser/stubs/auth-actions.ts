@@ -6,3 +6,7 @@ export async function logoutEverywhereAction(): Promise<void> {}
 export async function recordCookieConsentAction() {
   return { ok: true as const, data: undefined };
 }
+export async function setThemePreferenceAction(input: { theme: string }) {
+  (window as unknown as { __themeSaved?: string }).__themeSaved = input.theme;
+  return { ok: true as const, data: { theme: input.theme } };
+}

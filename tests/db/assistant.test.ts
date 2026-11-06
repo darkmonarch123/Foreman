@@ -839,7 +839,7 @@ describe("pre-flight run check", () => {
     expect(await check(fx.owner)).toEqual({ role: "OWNER" });
   });
 
-  it("is the only new function a client may execute, alongside the six it already had", async () => {
+  it("lists exactly the Assistant functions a client may execute", async () => {
     const rows = await db.admin<{ proname: string }>(
       `select p.proname from pg_proc p join pg_namespace n on n.oid = p.pronamespace
        where p.proname like 'assistant%' and has_function_privilege('authenticated', p.oid, 'execute')
@@ -847,12 +847,17 @@ describe("pre-flight run check", () => {
     );
     expect(rows.map((r) => r.proname)).toEqual([
       "assistant_accept_proposal",
+      "assistant_board_snapshot",
       "assistant_check_run",
+      "assistant_clear_feedback",
       "assistant_create_run",
       "assistant_edit_proposal",
+      "assistant_hidden_rules_for",
       "assistant_list_proposals",
       "assistant_mark_viewed",
       "assistant_reject_proposal",
+      "assistant_set_feedback",
+      "assistant_set_rule_hidden",
     ]);
   });
 });

@@ -266,7 +266,7 @@ export function Toggle({ label, description, checked, onChange, disabled }: Togg
         onClick={() => onChange(!checked)}
         className={cn(
           "relative mt-0.5 h-6 w-11 shrink-0 rounded-full border transition-colors duration-150 disabled:opacity-50",
-          checked ? "border-black bg-black" : "border-line-strong bg-line",
+          checked ? "border-accent bg-accent" : "border-line-strong bg-line",
         )}
       >
         <span

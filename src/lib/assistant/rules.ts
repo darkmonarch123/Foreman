@@ -14,6 +14,7 @@ import {
 } from "./context";
 import { NEAR_GAP, OVERLAP_TOLERANCE, boxOf, contains, gapBetween, overlapSize } from "./geometry";
 import { excerpt, normalizeText, round2 } from "./text";
+import { extractedDecision, extractedNextStep, extractedOwner, extractedRisk } from "./extract";
 import type { EvidenceRef, FindingLabel, RuleId, Severity } from "./types";
 
 /**
@@ -55,11 +56,11 @@ const GENERIC_WORDS: ReadonlySet<string> = new Set([
 ]);
 
 /** Notes with real, user-written content that the text rules may judge. */
-function userNotes(ctx: Ctx): Note[] {
+export function userNotes(ctx: Ctx): Note[] {
   return ctx.notes.filter((note) => !note.empty && !note.assistant);
 }
 
-function isNextStep(note: Note): boolean {
+export function isNextStep(note: Note): boolean {
   return (
     /^(?:decide|mitigate|next step|owner needed)\b/.test(note.norm) ||
     (questionKind(note.text) === null && hasActionVerb(note.text))
@@ -317,6 +318,10 @@ export const openQuestionWithoutNextStep: Rule = (ctx) => {
 };
 
 export const RULES: Record<RuleId, Rule> = {
+  extracted_decision: extractedDecision,
+  extracted_owner: extractedOwner,
+  extracted_risk: extractedRisk,
+  extracted_next_step: extractedNextStep,
   unanswered_question: unansweredQuestion,
   action_without_owner: actionWithoutOwner,
   vague_note: vagueNote,
