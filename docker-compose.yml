@@ -1,0 +1,26 @@
+# Foreman with Docker Compose, for local development and testing.
+#
+#   docker compose --env-file .env.local up --build
+#   open http://localhost:3000   (health: http://localhost:3000/api/health)
+#
+# Only the Next.js app runs in a container. Supabase (PostgreSQL, Auth, RLS,
+# Realtime) stays the managed project named in .env.local.
+services:
+  foreman:
+    build:
+      context: .
+      args:
+        NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL:?set NEXT_PUBLIC_SUPABASE_URL in .env.local}
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY:?set NEXT_PUBLIC_SUPABASE_ANON_KEY in .env.local}
+        NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:-http://localhost:3000}
+    image: foreman:local
+    ports:
+      - "3000:3000"
+    environment:
+      # Also needed at runtime: next.config.ts builds the Content Security Policy from it.
+      NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY}
+      NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:-http://localhost:3000}
+      NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_SITE_URL:-http://localhost:3000}
+      ASSISTANT_ENABLED: ${ASSISTANT_ENABLED:-true}
+    restart: unless-stopped

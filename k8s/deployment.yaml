@@ -1,0 +1,75 @@
+# Foreman on a local Kubernetes cluster (Docker Desktop). Uses the image built
+# by `docker build -t foreman:local .` straight from Docker Desktop's image
+# store, so nothing is pushed to a registry.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: foreman
+  namespace: foreman
+  labels:
+    app.kubernetes.io/name: foreman
+spec:
+  replicas: 2
+  revisionHistoryLimit: 5
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: foreman
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0 # keep serving while a new version starts
+      maxSurge: 1
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: foreman
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000 # the image's `node` user
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: foreman
+          image: foreman:local
+          imagePullPolicy: Never # local image only
+          ports:
+            - name: http
+              containerPort: 3000
+          envFrom:
+            - configMapRef:
+                name: foreman-config
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 512Mi
+          readinessProbe: # only receive traffic once the app answers
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe: # restart if it stops answering
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 20
+            failureThreshold: 3
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: next-cache # Next.js writes its cache here
+              mountPath: /app/.next/cache
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: next-cache
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}

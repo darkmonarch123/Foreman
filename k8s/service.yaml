@@ -1,0 +1,16 @@
+# Docker Desktop exposes LoadBalancer services on localhost.
+apiVersion: v1
+kind: Service
+metadata:
+  name: foreman
+  namespace: foreman
+  labels:
+    app.kubernetes.io/name: foreman
+spec:
+  type: LoadBalancer
+  selector:
+    app.kubernetes.io/name: foreman
+  ports:
+    - name: http
+      port: 3000
+      targetPort: http
