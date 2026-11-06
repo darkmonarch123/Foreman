@@ -12,6 +12,13 @@ import { defineConfig, devices } from "@playwright/test";
  */
 const executablePath = process.env.PLAYWRIGHT_CHROMIUM_PATH || undefined;
 
+/** `--project=e2e` (or `--project e2e`) alone needs no test harness: it runs against E2E_BASE_URL. */
+const args = process.argv.slice(2);
+const projects = args.flatMap((arg, index) =>
+  arg.startsWith("--project=") ? [arg.slice("--project=".length)] : arg === "--project" ? [args[index + 1]] : [],
+);
+const e2eOnly = projects.length > 0 && projects.every((project) => project === "e2e");
+
 export default defineConfig({
   timeout: 45_000,
   expect: { timeout: 8_000 },
@@ -24,6 +31,7 @@ export default defineConfig({
     viewport: { width: 1440, height: 900 },
     launchOptions: executablePath ? { executablePath } : {},
     trace: "retain-on-failure",
+    screenshot: "only-on-failure",
   },
   projects: [
     {
@@ -37,10 +45,12 @@ export default defineConfig({
       use: { baseURL: process.env.E2E_BASE_URL ?? "http://127.0.0.1:3000" },
     },
   ],
-  webServer: {
-    command: "npx vite --config tests/browser/vite.config.mts",
-    url: "http://127.0.0.1:4317",
-    reuseExistingServer: !process.env.CI,
-    timeout: 60_000,
-  },
+  webServer: e2eOnly
+    ? undefined
+    : {
+        command: "npx vite --config tests/browser/vite.config.mts",
+        url: "http://127.0.0.1:4317",
+        reuseExistingServer: !process.env.CI,
+        timeout: 60_000,
+      },
 });

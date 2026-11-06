@@ -12,7 +12,7 @@ pass proves, and what it does not prove.
 | Component        | `tests/components` | Vitest + Testing Library, jsdom | React components with Server Actions mocked                    | 115   | Passing locally                       |
 | Database         | `tests/db`         | Vitest + PGlite                 | The real migrations in an in-process Postgres                  | 196   | Passing locally                       |
 | Browser          | `tests/browser`    | Playwright, Chromium            | The real board UI and sync engine with an in-memory backend    | 68    | Passing locally                       |
-| End to end (e2e) | `tests/e2e`        | Playwright, Chromium            | A running Foreman and a real Supabase project                  | 3     | **Written, never run.** Skipped today |
+| End to end (e2e) | `tests/e2e`        | Playwright, Chromium            | A running Foreman and a real Supabase project                  | 5     | **Written, never run.** Skipped today |
 
 The three Vitest suites together are the 560 tests that `npm run test` runs.
 
@@ -298,7 +298,7 @@ Tests run serially with one worker. Traces are kept for failed tests under `test
 **Status:** written and type-checked, never executed. Until it has passed against your project, treat the
 journey it describes as unverified.
 
-`tests/e2e/journey.spec.ts` has three tests, run serially:
+`tests/e2e/journey.spec.ts` has three tests, and `tests/e2e/assistant-and-theme.spec.ts` two more, run serially:
 
 1. **Visitor pages.** The landing page renders, four protected URLs redirect to `/login`, and a wrong login
    shows the generic credentials error.
@@ -312,6 +312,14 @@ journey it describes as unverified.
    gets the "Board not found or access is unavailable." page, and a wrong collaboration code gives the same
    generic answer. (The test's title also mentions a viewer; it contains no viewer assertions. Viewer
    restrictions are covered in `tests/db/canvas.test.ts` and `tests/browser/board.spec.ts`.)
+
+4. **Assistant v1.1/v1.2 on a real board** (`assistant-and-theme.spec.ts`, owner only). The owner creates a board,
+   adds "Who owns onboarding?", runs the Assistant, and checks the confidence band and Planning clarity; marks the
+   finding Helpful and sees it still marked after a reload (stored by `assistant_set_feedback`); accepts the
+   proposal, sees exactly one "Decide:" note, undoes it; runs again, edits the evidence note, and sees the proposal
+   marked stale with Accept disabled. Needs `ASSISTANT_ENABLED=true` in the running app.
+5. **Theme preference** (`assistant-and-theme.spec.ts`). Dark is chosen from the account menu, survives a reload,
+   and a new browser session picks it up from the account; the account is then set back to System.
 
 ### Preconditions
 
@@ -333,8 +341,8 @@ journey it describes as unverified.
    app, following the [demo script](demo-script.md), and click the verification link for each. Both must be
    able to log in and reach `/dashboard`. An unverified owner cannot create a board.
 4. **Chromium** for Playwright: `npx playwright install chromium`, or set `PLAYWRIGHT_CHROMIUM_PATH`.
-5. **Port 4317 free.** The Playwright configuration has a single `webServer` entry, so the Vite harness is
-   started for the `e2e` project as well, although the e2e tests do not use it.
+5. **`ASSISTANT_ENABLED=true`** in the running app for test 4 (Render sets it; locally add it to `.env.local`
+   before `npm run build`, because production mode treats a missing value as off).
 
 ### Variables
 
@@ -352,6 +360,19 @@ check. Playwright does not read `.env.local`; export the variables in the shell 
 `.env.example` are a reminder of the names only).
 
 ### Running
+
+The easiest way: start the app, then run the helper. It asks for the four values (passwords are not echoed or
+saved), checks that `/api/health` reports Supabase as configured, and runs the suite:
+
+```bash
+npm run build && npm run start           # first terminal; .env.local must include ASSISTANT_ENABLED=true
+npm run test:e2e:live                    # second terminal (E2E_BASE_URL defaults to http://localhost:3000)
+E2E_BASE_URL=https://<your-app>.onrender.com npm run test:e2e:live   # or against a deployment
+```
+
+`--project=e2e` on its own does not start the browser-test harness, so port 4317 does not need to be free.
+
+Or set the variables yourself:
 
 ```bash
 export E2E_BASE_URL=http://127.0.0.1:3000

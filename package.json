@@ -18,6 +18,7 @@
     "test:db": "vitest run tests/db",
     "test:browser": "playwright test --project=board",
     "test:e2e": "playwright test --project=e2e",
+    "test:e2e:live": "bash scripts/run-e2e.sh",
     "db:generate-templates": "UPDATE_TEMPLATE_SEED=1 vitest run tests/unit/template-seed.test.ts",
     "check": "npm run format:check && npm run lint && npm run typecheck && npm run test && npm run build"
   },
